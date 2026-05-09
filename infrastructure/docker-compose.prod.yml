@@ -1,0 +1,74 @@
+services:
+  postgres:
+    image: pgvector/pgvector:pg16
+    restart: unless-stopped
+    environment:
+      POSTGRES_USER: ${POSTGRES_USER:-maestro}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD}
+      POSTGRES_DB: ${POSTGRES_DB:-maestro_claudio}
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+      - ./migrations:/docker-entrypoint-initdb.d:ro
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U ${POSTGRES_USER:-maestro} -d ${POSTGRES_DB:-maestro_claudio}"]
+      interval: 10s
+      timeout: 5s
+      retries: 10
+
+  redis:
+    image: redis:7-alpine
+    restart: unless-stopped
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 10s
+      timeout: 3s
+      retries: 5
+
+  backend:
+    build:
+      context: ../backend
+      dockerfile: Dockerfile
+    image: maestro-claudio-backend:latest
+    restart: unless-stopped
+    env_file: ../.env
+    ports:
+      - "8000:8000"
+    depends_on:
+      postgres:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+
+  worker:
+    image: maestro-claudio-backend:latest
+    restart: unless-stopped
+    command: celery -A workers.celery_app worker --loglevel=info --concurrency=2
+    env_file: ../.env
+    depends_on:
+      postgres:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+
+  beat:
+    image: maestro-claudio-backend:latest
+    restart: unless-stopped
+    command: celery -A workers.celery_app beat --loglevel=info
+    env_file: ../.env
+    depends_on:
+      redis:
+        condition: service_healthy
+
+  mcp:
+    build:
+      context: ../mcp
+      dockerfile: Dockerfile
+    image: maestro-claudio-mcp:latest
+    restart: unless-stopped
+    env_file: ../.env
+    depends_on:
+      postgres:
+        condition: service_healthy
+
+volumes:
+  postgres_data:
