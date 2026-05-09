@@ -1,74 +1,66 @@
+# Maestro Claudio · producción (Hetzner VPS)
+#
+# Uso:
+#   docker compose -f infrastructure/docker-compose.prod.yml up -d --build
+#
+# Postgres NO está incluido: se usa la instancia que ya corre en el VPS.
+# DATABASE_URL en .env.production debe apuntar a esa instancia. Si Postgres
+# escucha en el host, `host.docker.internal` (mapeado a `host-gateway`) permite
+# alcanzarlo desde dentro de los contenedores en Linux.
+
 services:
-  postgres:
-    image: pgvector/pgvector:pg16
-    restart: unless-stopped
-    environment:
-      POSTGRES_USER: ${POSTGRES_USER:-maestro}
-      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD}
-      POSTGRES_DB: ${POSTGRES_DB:-maestro_claudio}
-    volumes:
-      - postgres_data:/var/lib/postgresql/data
-      - ./migrations:/docker-entrypoint-initdb.d:ro
-    healthcheck:
-      test: ["CMD-SHELL", "pg_isready -U ${POSTGRES_USER:-maestro} -d ${POSTGRES_DB:-maestro_claudio}"]
-      interval: 10s
-      timeout: 5s
-      retries: 10
-
-  redis:
-    image: redis:7-alpine
-    restart: unless-stopped
-    healthcheck:
-      test: ["CMD", "redis-cli", "ping"]
-      interval: 10s
-      timeout: 3s
-      retries: 5
-
-  backend:
+  maestro-api:
+    container_name: maestro-api
     build:
       context: ../backend
       dockerfile: Dockerfile
     image: maestro-claudio-backend:latest
-    restart: unless-stopped
-    env_file: ../.env
     ports:
-      - "8000:8000"
+      - "8001:8001"
+    volumes:
+      - ../audio:/app/audio
+    env_file: ../.env.production
+    command: uvicorn main:app --host 0.0.0.0 --port 8001
+    extra_hosts:
+      - "host.docker.internal:host-gateway"
+    restart: always
     depends_on:
-      postgres:
-        condition: service_healthy
-      redis:
-        condition: service_healthy
+      - redis
 
-  worker:
+  maestro-worker:
+    container_name: maestro-worker
     image: maestro-claudio-backend:latest
-    restart: unless-stopped
+    volumes:
+      - ../audio:/app/audio
+    env_file: ../.env.production
     command: celery -A workers.celery_app worker --loglevel=info --concurrency=2
-    env_file: ../.env
+    extra_hosts:
+      - "host.docker.internal:host-gateway"
+    restart: always
     depends_on:
-      postgres:
-        condition: service_healthy
-      redis:
-        condition: service_healthy
+      - redis
+      - maestro-api
 
-  beat:
-    image: maestro-claudio-backend:latest
-    restart: unless-stopped
-    command: celery -A workers.celery_app beat --loglevel=info
-    env_file: ../.env
-    depends_on:
-      redis:
-        condition: service_healthy
-
-  mcp:
+  maestro-mcp:
+    container_name: maestro-mcp
     build:
       context: ../mcp
       dockerfile: Dockerfile
     image: maestro-claudio-mcp:latest
-    restart: unless-stopped
-    env_file: ../.env
-    depends_on:
-      postgres:
-        condition: service_healthy
+    ports:
+      - "8002:8002"
+    env_file: ../.env.production
+    extra_hosts:
+      - "host.docker.internal:host-gateway"
+    restart: always
+
+  redis:
+    container_name: maestro-redis
+    image: redis:7-alpine
+    volumes:
+      - redis_data:/data
+    restart: always
+    command: ["redis-server", "--appendonly", "yes"]
 
 volumes:
-  postgres_data:
+  redis_data:

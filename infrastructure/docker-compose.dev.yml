@@ -1,79 +1,76 @@
+# Maestro Claudio · entorno de desarrollo (Mac local)
+#
+# Uso:
+#   docker compose -f infrastructure/docker-compose.dev.yml up --build
+#
+# Las rutas relativas (../backend, ../audio, ./migrations) se resuelven contra
+# la ubicación de ESTE archivo, no contra la cwd desde la que se invoca.
+#
+# Restricciones de recursos: la Mac de desarrollo tiene 4 GB de RAM compartidos
+# entre todos los servicios → worker con concurrency=1.
+
 services:
-  postgres:
-    image: pgvector/pgvector:pg16
-    environment:
-      POSTGRES_USER: maestro
-      POSTGRES_PASSWORD: maestro
-      POSTGRES_DB: maestro_claudio
+  maestro-api:
+    container_name: maestro-api
+    build:
+      context: ../backend
+      dockerfile: Dockerfile.dev
     ports:
-      - "5432:5432"
+      - "8001:8001"
     volumes:
-      - postgres_data:/var/lib/postgresql/data
+      - ../backend:/app           # hot reload del código fuente
+      - ../audio:/app/audio       # archivos de audio descargados/transcritos
+    env_file: ../.env.local
+    command: uvicorn main:app --reload --host 0.0.0.0 --port 8001
+    depends_on:
+      redis:
+        condition: service_started
+      postgres-dev:
+        condition: service_healthy
+
+  maestro-worker:
+    container_name: maestro-worker
+    build:
+      context: ../backend
+      dockerfile: Dockerfile.dev
+    volumes:
+      - ../backend:/app
+      - /tmp:/tmp                 # archivos temporales compartidos con el host
+      - ../audio:/app/audio
+    env_file: ../.env.local
+    command: celery -A workers.celery_app worker --loglevel=info --concurrency=1
+    depends_on:
+      redis:
+        condition: service_started
+      postgres-dev:
+        condition: service_healthy
+
+  redis:
+    container_name: maestro-redis
+    image: redis:7-alpine
+    ports:
+      # 6380 en host para no chocar con otros Redis (cryptohunter, brew, etc).
+      # El backend dentro del compose habla con `redis://redis:6379/0`
+      # (hostname del servicio, puerto interno del container).
+      - "6380:6379"
+
+  postgres-dev:
+    container_name: maestro-postgres-dev
+    image: pgvector/pgvector:pg15
+    ports:
+      - "5433:5432"               # 5433 en host para no chocar con otros Postgres
+    environment:
+      POSTGRES_DB: maestro_claudio_dev
+      POSTGRES_USER: dev
+      POSTGRES_PASSWORD: dev
+    volumes:
+      - pgdata_dev:/var/lib/postgresql/data
       - ./migrations:/docker-entrypoint-initdb.d:ro
     healthcheck:
-      test: ["CMD-SHELL", "pg_isready -U maestro -d maestro_claudio"]
+      test: ["CMD-SHELL", "pg_isready -U dev -d maestro_claudio_dev"]
       interval: 5s
       timeout: 5s
       retries: 10
 
-  redis:
-    image: redis:7-alpine
-    ports:
-      - "6379:6379"
-    healthcheck:
-      test: ["CMD", "redis-cli", "ping"]
-      interval: 5s
-      timeout: 3s
-      retries: 5
-
-  backend:
-    build:
-      context: ../backend
-      dockerfile: Dockerfile.dev
-    env_file: ../.env
-    environment:
-      ENVIRONMENT: development
-      DATABASE_URL: postgresql+asyncpg://maestro:maestro@postgres:5432/maestro_claudio
-      REDIS_URL: redis://redis:6379/0
-    ports:
-      - "8000:8000"
-    volumes:
-      - ../backend:/app
-    depends_on:
-      postgres:
-        condition: service_healthy
-      redis:
-        condition: service_healthy
-
-  worker:
-    build:
-      context: ../backend
-      dockerfile: Dockerfile.dev
-    command: celery -A workers.celery_app worker --loglevel=info
-    env_file: ../.env
-    environment:
-      ENVIRONMENT: development
-      DATABASE_URL: postgresql+asyncpg://maestro:maestro@postgres:5432/maestro_claudio
-      REDIS_URL: redis://redis:6379/0
-    volumes:
-      - ../backend:/app
-    depends_on:
-      postgres:
-        condition: service_healthy
-      redis:
-        condition: service_healthy
-
-  mcp:
-    build:
-      context: ../mcp
-    env_file: ../.env
-    environment:
-      DATABASE_URL: postgresql+asyncpg://maestro:maestro@postgres:5432/maestro_claudio
-    ports:
-      - "8765:8765"
-    depends_on:
-      postgres:
-        condition: service_healthy
-
 volumes:
-  postgres_data:
+  pgdata_dev:

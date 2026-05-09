@@ -17,8 +17,11 @@ Agente de estudio personal para Maestría en Ciberseguridad.
 1. Copiar variables de entorno y completarlas:
 
    ```bash
-   cp .env.example .env
+   cp .env.example .env.local
    ```
+
+   `docker-compose.dev.yml` lee `.env.local` (no `.env`).
+   En producción, el VPS usa `.env.production`.
 
 2. Levantar servicios de desarrollo (Postgres, Redis, backend, worker, MCP):
 

@@ -3,60 +3,48 @@ name: Deploy
 on:
   push:
     branches: [main]
-  workflow_dispatch:
 
 jobs:
-  build-backend:
+  deploy-backend:
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v4
-
-      - name: Set up Docker Buildx
-        uses: docker/setup-buildx-action@v3
-
-      - name: Build backend image
-        uses: docker/build-push-action@v5
+      - name: Deploy to VPS
+        uses: appleboy/ssh-action@master
         with:
-          context: ./backend
-          file: ./backend/Dockerfile
-          push: false
-          tags: maestro-claudio-backend:latest
-          cache-from: type=gha
-          cache-to: type=gha,mode=max
+          host: ${{ secrets.VPS_HOST }}
+          username: ${{ secrets.VPS_USER }}
+          key: ${{ secrets.VPS_SSH_KEY }}
+          script: |
+            cd /opt/maestro-claudio
+            git pull origin main
+            docker-compose -f infrastructure/docker-compose.prod.yml up -d --build maestro-api maestro-worker maestro-mcp
+            docker image prune -f
 
-      - name: Build MCP image
-        uses: docker/build-push-action@v5
-        with:
-          context: ./mcp
-          file: ./mcp/Dockerfile
-          push: false
-          tags: maestro-claudio-mcp:latest
-          cache-from: type=gha
-          cache-to: type=gha,mode=max
-
-  build-web:
+  notify:
     runs-on: ubuntu-latest
-    defaults:
-      run:
-        working-directory: web
+    needs: deploy-backend
+    if: always()
     steps:
-      - uses: actions/checkout@v4
+      - name: Send WhatsApp notification
+        env:
+          WA_PHONE_ID: ${{ secrets.WA_PHONE_ID }}
+          WA_TOKEN: ${{ secrets.WA_TOKEN }}
+          WA_MY_NUMBER: ${{ secrets.WA_MY_NUMBER }}
+          META_API_VERSION: ${{ vars.META_API_VERSION }}
+          DEPLOY_RESULT: ${{ needs.deploy-backend.result }}
+        run: |
+          if [ "$DEPLOY_RESULT" = "success" ]; then
+            MESSAGE="✅ Maestro Claudio actualizado correctamente"
+          else
+            MESSAGE="❌ Error en el deploy. Revisar GitHub Actions."
+          fi
 
-      - name: Set up Node
-        uses: actions/setup-node@v4
-        with:
-          node-version: "20"
-          cache: npm
-          cache-dependency-path: web/package-lock.json
-
-      - name: Install dependencies
-        run: npm ci
-
-      - name: Build
-        run: npm run build
-
-      - name: Upload build artifact
-        uses: actions/upload-artifact@v4
-        with:
-          name: web-dist
-          path: web/dist
+          curl -X POST "https://graph.facebook.com/${META_API_VERSION:-v21.0}/${WA_PHONE_ID}/messages" \
+            -H "Authorization: Bearer ${WA_TOKEN}" \
+            -H "Content-Type: application/json" \
+            -d "{
+              \"messaging_product\": \"whatsapp\",
+              \"to\": \"${WA_MY_NUMBER}\",
+              \"type\": \"text\",
+              \"text\": { \"body\": \"${MESSAGE}\" }
+            }"

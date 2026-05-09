@@ -46,4 +46,8 @@ def echo(message: str) -> str:
 
 
 if __name__ == "__main__":
-    mcp.run()
+    # Expone el server por HTTP en el puerto 8002 para que el reverse proxy
+    # del VPS (study.denario.cloud/mcp) y otros agentes (Claude.ai, Claude Code)
+    # puedan consumirlo. Sin transport="streamable-http" FastMCP corre en stdio
+    # y el mapeo 8002:8002 del docker-compose queda colgado.
+    mcp.run(transport="streamable-http", host="0.0.0.0", port=8002)

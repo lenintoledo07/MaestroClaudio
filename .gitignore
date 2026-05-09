@@ -31,3 +31,9 @@ Thumbs.db
 .vscode/
 .idea/
 *.swp
+
+# Claude Code (planes, memorias, settings locales del agente)
+.claude/
+
+# Temp directory mounted in Docker workers
+/tmp/
