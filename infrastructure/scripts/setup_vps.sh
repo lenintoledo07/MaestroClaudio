@@ -61,6 +61,10 @@ if [[ -n "$PG_MAJOR" ]]; then
     apt-get install -y -qq "postgresql-${PG_MAJOR}-pgvector" || warn "pgvector apt no disponible, intentá compilar desde fuente."
 fi
 
+# Detectar el port real del cluster (puede ser 5432 o 5433 si hay otro PG corriendo).
+PG_PORT=$(sudo -u postgres psql -tAc "SHOW port;" 2>/dev/null | tr -d ' ' || echo "5432")
+log "   Postgres detectado en port ${PG_PORT}"
+
 if ! sudo -u postgres psql -tAc "SELECT 1 FROM pg_database WHERE datname='${POSTGRES_DB}'" | grep -q 1; then
     log "3.b creando DB ${POSTGRES_DB}"
     sudo -u postgres createdb "${POSTGRES_DB}"
@@ -68,6 +72,20 @@ fi
 
 sudo -u postgres psql -d "${POSTGRES_DB}" -c "CREATE EXTENSION IF NOT EXISTS vector;" >/dev/null
 sudo -u postgres psql -d "${POSTGRES_DB}" -c "CREATE EXTENSION IF NOT EXISTS pgcrypto;" >/dev/null
+
+# Permitir conexiones desde cualquier red Docker default (172.16.0.0/12 cubre
+# 172.16-172.31). El bridge default de Docker es 172.17, pero `docker compose`
+# crea redes desde 172.18 en adelante — solo 172.17 no alcanza.
+PG_HBA="/etc/postgresql/${PG_MAJOR}/main/pg_hba.conf"
+if [[ -f "${PG_HBA}" ]] && ! grep -q "172.16.0.0/12" "${PG_HBA}"; then
+    echo "host all all 172.16.0.0/12 scram-sha-256" >> "${PG_HBA}"
+    sudo -u postgres pg_ctlcluster "${PG_MAJOR}" main reload || true
+fi
+PG_CONF="/etc/postgresql/${PG_MAJOR}/main/postgresql.conf"
+if [[ -f "${PG_CONF}" ]] && ! grep -qE "^listen_addresses.*=.*'\\*'" "${PG_CONF}"; then
+    sed -i "s/^#\\?listen_addresses.*/listen_addresses = '*'/" "${PG_CONF}"
+    systemctl restart postgresql
+fi
 
 # ── 4. Repo ─────────────────────────────────────────────────────────────────
 log "4. Repo en ${APP_DIR}"
@@ -80,12 +98,14 @@ fi
 
 # ── 5. .env.production ──────────────────────────────────────────────────────
 ENV_FILE="${APP_DIR}/.env.production"
-if [[ ! -f "${ENV_FILE}" ]]; then
-    log "5. Creando .env.production desde .env.example"
-    cp "${APP_DIR}/.env.example" "${ENV_FILE}"
+if [[ ! -f "${ENV_FILE}" ]] || ! grep -q "^SECRET_KEY=." "${ENV_FILE}"; then
+    if [[ ! -f "${ENV_FILE}" ]]; then
+        log "5. Creando .env.production desde .env.example"
+        cp "${APP_DIR}/.env.example" "${ENV_FILE}"
+    fi
     warn "Editá ${ENV_FILE} y poblá:"
     warn "  - SECRET_KEY (generá: python3 -c 'import secrets; print(secrets.token_urlsafe(48))')"
-    warn "  - DATABASE_URL  (postgresql://USER:PASS@host.docker.internal:5432/${POSTGRES_DB})"
+    warn "  - DATABASE_URL  (postgresql://USER:PASS@host.docker.internal:${PG_PORT}/${POSTGRES_DB})"
     warn "  - REDIS_URL     (redis://redis:6379/0)"
     warn "  - GOOGLE_*, CLAUDE_*, OPENAI_*, DEEPGRAM_*, ELEVENLABS_*"
     warn "  - WHATSAPP_*    (si lo vas a usar)"
@@ -104,6 +124,20 @@ for migration in "${APP_DIR}/infrastructure/migrations/"*.sql; do
     sudo -u postgres psql -d "${POSTGRES_DB}" -f "${migration}" >/dev/null 2>&1 \
         || warn "Migración $(basename "$migration") ya aplicada o falló (revisá logs)."
 done
+
+# Las migraciones corren como `postgres` así que las tablas quedan owner postgres.
+# Re-grant al user que el backend usa para que pueda escribir.
+if [[ -n "${DB_USER}" ]]; then
+    log "   GRANTs a ${DB_USER}"
+    sudo -u postgres psql -d "${POSTGRES_DB}" >/dev/null 2>&1 <<EOF || true
+GRANT ALL ON ALL TABLES IN SCHEMA public TO ${DB_USER};
+GRANT ALL ON ALL SEQUENCES IN SCHEMA public TO ${DB_USER};
+GRANT ALL ON ALL FUNCTIONS IN SCHEMA public TO ${DB_USER};
+ALTER DEFAULT PRIVILEGES IN SCHEMA public GRANT ALL ON TABLES TO ${DB_USER};
+ALTER DEFAULT PRIVILEGES IN SCHEMA public GRANT ALL ON SEQUENCES TO ${DB_USER};
+ALTER DEFAULT PRIVILEGES IN SCHEMA public GRANT ALL ON FUNCTIONS TO ${DB_USER};
+EOF
+fi
 
 # ── 7. nginx ────────────────────────────────────────────────────────────────
 log "7. nginx config para ${DOMAIN}"
@@ -163,14 +197,22 @@ server {
 }
 EOF
 ln -sf "${NGINX_CONF}" /etc/nginx/sites-enabled/maestro-claudio
-rm -f /etc/nginx/sites-enabled/default
+# NO borramos sites-enabled/default automáticamente: en un VPS compartido con
+# otros proyectos, default suele ser un catch-all importante. Si querés que
+# study.denario.cloud tome todo el tráfico HTTP, borralo a mano:
+#   rm /etc/nginx/sites-enabled/default && nginx -s reload
 nginx -t
 systemctl reload nginx
 
 # ── 8. UFW ──────────────────────────────────────────────────────────────────
 log "8. Firewall (UFW)"
-ufw --force allow OpenSSH
-ufw --force allow 'Nginx Full'
+# `--force` solo aplica a enable/reset/disable. Con allow falla y aborta el
+# script (set -e). Por eso van sin --force.
+ufw allow OpenSSH
+ufw allow 'Nginx Full'
+# Permitir que los containers Docker alcancen Postgres del host
+# (todas las redes Docker default 172.16-31).
+ufw allow from 172.16.0.0/12 to any port "${PG_PORT}" proto tcp comment 'docker→postgres'
 ufw --force enable
 
 # ── 9. SSL ──────────────────────────────────────────────────────────────────
