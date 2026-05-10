@@ -11,7 +11,7 @@ from fastapi.middleware.cors import CORSMiddleware
 
 from config import settings
 from database import close_pool, health_check, init_pool
-from routers import auth, chat, courses, evaluations, materials, modules, signals
+from routers import auth, calendar, chat, courses, evaluations, materials, modules, signals, whatsapp
 from scheduler import start_scheduler, stop_scheduler
 
 logging.basicConfig(
@@ -91,8 +91,6 @@ async def health_db():
 # ── Routers ─────────────────────────────────────────────────────────────────
 # Fase 1: auth, courses, modules, evaluations.
 # Fase 2: materials, signals, chat.
-# Fase 5+: calendar, whatsapp.
-
 app.include_router(auth.router, prefix="/auth")
 app.include_router(courses.router)
 app.include_router(modules.router)
@@ -100,3 +98,5 @@ app.include_router(evaluations.router)
 app.include_router(materials.router)
 app.include_router(signals.router)
 app.include_router(chat.router)
+app.include_router(calendar.router)
+app.include_router(whatsapp.router)

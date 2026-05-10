@@ -1,8 +1,13 @@
 """Scheduler de tareas periódicas (APScheduler).
 
-Por ahora solo corre los recordatorios de evaluaciones (7 días y 1 día). El
-envío real por WhatsApp/push se hace contra `notify_user()`, que en Fase 1 es
-un stub que loggea. En Fase 5 se reemplaza por whatsapp_service.send_notification.
+Jobs:
+- `eval_reminders`  diario @11:00 UTC — recordatorios 7d/1d vía WhatsApp.
+- `weekly_calendar` lunes  @11:00 UTC — sync Calendar de cada user
+                                        + checklist WhatsApp si faltan grabs.
+
+`notify_user` ahora delega en `whatsapp_service.send_notification`. Si las
+keys de WhatsApp no están seteadas, el service loggea y devuelve False sin
+romper.
 """
 
 from __future__ import annotations
@@ -14,6 +19,7 @@ from apscheduler.schedulers.asyncio import AsyncIOScheduler
 from apscheduler.triggers.cron import CronTrigger
 
 from database import get_pool
+from services import calendar_service, whatsapp_service
 
 logger = logging.getLogger(__name__)
 
@@ -24,13 +30,13 @@ DEFAULT_SEND_HOUR_UTC = 11
 _scheduler: AsyncIOScheduler | None = None
 
 
-async def notify_user(
-    user_id, kind: str, payload: dict
-) -> None:  # pragma: no cover - stub
-    """Stub Fase 1. En Fase 5 esto invoca a whatsapp_service.send_notification."""
-    logger.info(
-        "[notify stub] user=%s kind=%s payload=%s", user_id, kind, payload
-    )
+async def notify_user(user_id, kind: str, payload: dict) -> None:
+    """Delega al service de WhatsApp. Si no está configurado, queda en log."""
+    logger.info("notify user=%s kind=%s", user_id, kind)
+    try:
+        await whatsapp_service.send_notification(user_id, kind, payload)
+    except Exception as exc:  # noqa: BLE001
+        logger.warning("notify falló (no es bloqueante): %s", exc)
 
 
 async def remind_upcoming_evaluations() -> None:
@@ -56,13 +62,19 @@ async def remind_upcoming_evaluations() -> None:
             target_7d,
         )
         for r in rows_7d:
+            tips_n = await conn.fetchval(
+                "SELECT COUNT(*) FROM signals WHERE course_id = $1 AND type = 'exam_tip'",
+                r["course_id"],
+            )
+            weight = r["weight_pct"]
             await notify_user(
                 r["user_id"],
                 "eval_reminder_7d",
                 {
                     "title": r["title"],
                     "course_name": r["course_name"],
-                    "weight_pct": float(r["weight_pct"]) if r["weight_pct"] else None,
+                    "weight_pct": f"{float(weight):.0f}" if weight else "—",
+                    "tips_n": tips_n or 0,
                 },
             )
             await conn.execute(
@@ -86,7 +98,11 @@ async def remind_upcoming_evaluations() -> None:
             await notify_user(
                 r["user_id"],
                 "eval_reminder_1d",
-                {"title": r["title"], "course_name": r["course_name"]},
+                {
+                    "title": r["title"],
+                    "course_name": r["course_name"],
+                    "course_id": str(r["course_id"]),
+                },
             )
             await conn.execute(
                 "UPDATE evaluations SET reminder_sent_1d = TRUE WHERE id = $1",
@@ -96,6 +112,55 @@ async def remind_upcoming_evaluations() -> None:
     logger.info(
         "Recordatorios procesados: 7d=%d, 1d=%d", len(rows_7d), len(rows_1d)
     )
+
+
+async def weekly_calendar_sync() -> None:
+    """Lunes 11:00 UTC: para cada user activo, sincroniza Calendar y manda
+    checklist por WhatsApp si quedaron clases sin grabar la semana pasada."""
+    pool = get_pool()
+    async with pool.acquire() as conn:
+        users = await conn.fetch("SELECT id FROM users")
+        if not users:
+            return
+        today = date.today()
+        last_monday = today - timedelta(days=today.weekday() + 7)
+        last_sunday = last_monday + timedelta(days=6)
+        week_n = today.isocalendar()[1]
+
+        for u in users:
+            user_id = u["id"]
+            try:
+                summary = await calendar_service.sync_user_calendar(user_id)
+                logger.info("Calendar sync user=%s %s", user_id, summary)
+            except Exception as exc:  # noqa: BLE001
+                logger.warning("Calendar sync user=%s falló: %s", user_id, exc)
+                continue
+
+            missing = await conn.fetch(
+                """
+                SELECT ce.title, ce.event_date, c.name AS course_name
+                FROM calendar_events ce
+                JOIN courses c ON c.id = ce.course_id
+                WHERE c.user_id = $1
+                  AND c.status = 'active'
+                  AND ce.event_date BETWEEN $2 AND $3
+                  AND ce.material_status = 'missing'
+                ORDER BY ce.event_date
+                """,
+                user_id, last_monday, last_sunday,
+            )
+            if not missing:
+                continue
+
+            lines = [
+                f"• {r['event_date'].strftime('%a %d/%m')} · {r['course_name']} — {r['title']}"
+                for r in missing
+            ]
+            await notify_user(
+                user_id,
+                "weekly_checklist",
+                {"week_n": week_n, "missing_list": "\n".join(lines)},
+            )
 
 
 def start_scheduler() -> AsyncIOScheduler:
@@ -113,9 +178,18 @@ def start_scheduler() -> AsyncIOScheduler:
         coalesce=True,
         misfire_grace_time=3600,
     )
+    _scheduler.add_job(
+        weekly_calendar_sync,
+        trigger=CronTrigger(day_of_week="mon", hour=DEFAULT_SEND_HOUR_UTC, minute=5),
+        id="weekly_calendar",
+        replace_existing=True,
+        coalesce=True,
+        misfire_grace_time=3600,
+    )
     _scheduler.start()
     logger.info(
-        "Scheduler iniciado: eval_reminders @ %02d:00 UTC", DEFAULT_SEND_HOUR_UTC
+        "Scheduler iniciado: eval_reminders @ %02d:00 UTC, weekly_calendar lun @ %02d:05 UTC",
+        DEFAULT_SEND_HOUR_UTC, DEFAULT_SEND_HOUR_UTC
     )
     return _scheduler
 
