@@ -206,11 +206,30 @@ async def _process_material_async(material_id: UUID) -> dict[str, Any]:
             chunk_type=("whatsapp" if mtype == "whatsapp_export" else "transcript"),
         )
 
-        # 6. Listo
+        # 6. Listo + estimación de costo (riesgo #4)
+        from services import cost_tracker
+
+        post_state = await conn.fetchrow(
+            "SELECT summary_text, audio_path FROM materials WHERE id = $1",
+            material_id,
+        )
+        cost = cost_tracker.estimate(
+            transcript=transcript,
+            summary=post_state["summary_text"] if post_state else None,
+            duration_seconds=duration_seconds,
+            has_audio=bool(post_state and post_state["audio_path"]),
+            has_embeddings=chunks_n > 0,
+            is_video=(mtype == "video"),
+        )
+        await conn.execute(
+            "UPDATE materials SET cost_estimated_usd = $1 WHERE id = $2",
+            cost["total_usd"], material_id,
+        )
+
         await _set_status(conn, material_id, "ready")
         logger.info(
-            "Material %s LISTO (chunks=%d, duration=%s)",
-            material_id, chunks_n, duration_seconds,
+            "Material %s LISTO (chunks=%d, duration=%s, cost≈$%.4f) breakdown=%s",
+            material_id, chunks_n, duration_seconds, cost["total_usd"], cost,
         )
 
         # 7. Notificar (stub Fase 1, real en Fase 5)

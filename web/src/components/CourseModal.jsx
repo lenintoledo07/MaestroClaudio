@@ -84,14 +84,16 @@ export default function CourseModal({ course, onClose, onSaved }) {
         </div>
 
         <div className="field">
-          <label>Carpeta de Drive (file_id)</label>
+          <label>Carpeta de Google Drive</label>
           <input
             value={form.drive_folder_id}
             onChange={(e) => update('drive_folder_id', e.target.value)}
-            placeholder="ID o pegá un link de la carpeta"
+            placeholder="https://drive.google.com/drive/folders/abc123..."
           />
           <span className="text-small">
-            Por ahora pegá el ID a mano. El picker de Drive llega en una próxima iteración.
+            Pegá el link completo de la carpeta (ej. <code>drive.google.com/drive/folders/&lt;id&gt;</code>) o solo el ID.
+            Una vez linkeada, vas a ver el botón "☁ Importar de Drive" en el detalle de la materia
+            con todos los videos disponibles para procesar.
           </span>
         </div>
 

@@ -45,6 +45,22 @@ services:
       postgres-dev:
         condition: service_healthy
 
+  maestro-mcp:
+    container_name: maestro-mcp
+    build:
+      context: ../mcp
+      dockerfile: Dockerfile
+    ports:
+      - "8002:8002"
+    volumes:
+      - ../mcp:/app                # hot reload manual con docker restart
+    env_file: ../.env.local
+    # En dev no hay reload nativo de FastMCP; reiniciás con
+    # `docker restart maestro-mcp` después de cambios en server.py.
+    depends_on:
+      postgres-dev:
+        condition: service_healthy
+
   redis:
     container_name: maestro-redis
     image: redis:7-alpine

@@ -3,6 +3,7 @@ import { useParams, useNavigate } from 'react-router-dom';
 import Sidebar from '../components/Sidebar';
 import AbstractArt from '../components/AbstractArt';
 import MaterialUploader from '../components/MaterialUploader';
+import DriveBrowser from '../components/DriveBrowser';
 import ChatInterface from '../components/ChatInterface';
 import EvaluationsTab from '../components/EvaluationsTab';
 import CourseModal from '../components/CourseModal';
@@ -18,6 +19,7 @@ export default function CourseDetail() {
   const [materials, setMaterials] = useState([]);
   const [tab, setTab] = useState('clases');
   const [showUploader, setShowUploader] = useState(false);
+  const [showDrive, setShowDrive] = useState(false);
   const [showCourseModal, setShowCourseModal] = useState(false);
   const [showAddModule, setShowAddModule] = useState(false);
   const [newModuleName, setNewModuleName] = useState('');
@@ -80,8 +82,13 @@ export default function CourseDetail() {
           </div>
           <div className="row" style={{ gap: 8 }}>
             <button className="btn btn-ghost" onClick={() => setShowAddModule((v) => !v)}>+ Semana</button>
+            {course.drive_folder_id && (
+              <button className="btn btn-ghost" disabled={!firstModuleId} onClick={() => setShowDrive((v) => !v)}>
+                ☁ Importar de Drive
+              </button>
+            )}
             <button className="btn btn-primary" disabled={!firstModuleId} onClick={() => setShowUploader((v) => !v)}>
-              ↑ Subir Material
+              ↑ Subir manual
             </button>
           </div>
         </header>
@@ -101,9 +108,26 @@ export default function CourseDetail() {
           </div>
         )}
 
+        {!course.drive_folder_id && (
+          <div className="card" style={{ marginBottom: 20, borderColor: 'var(--orange)' }}>
+            <p style={{ margin: 0 }}>
+              💡 <b>Tip:</b> linkeá una carpeta de Google Drive a esta materia (3 puntitos en el sidebar → Editar → "Carpeta de Drive") y vas a poder importar todos los videos de un click sin pegarlos uno por uno.
+            </p>
+          </div>
+        )}
+
+        {showDrive && firstModuleId && (
+          <div style={{ marginBottom: 20 }}>
+            <DriveBrowser courseId={id} modules={modules} onImported={() => load()} />
+          </div>
+        )}
+
         {showUploader && firstModuleId && (
           <div className="card" style={{ marginBottom: 20 }}>
-            <h3 style={{ margin: '0 0 12px' }}>Subir material</h3>
+            <h3 style={{ margin: '0 0 12px' }}>Subir material manualmente</h3>
+            <p className="text-small" style={{ marginBottom: 12 }}>
+              Pegá la URL de un video específico de Drive, o subí un export .txt de WhatsApp.
+            </p>
             <div className="field">
               <label>Semana</label>
               <select id="module-select" defaultValue={firstModuleId}>

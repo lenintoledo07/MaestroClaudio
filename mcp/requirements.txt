@@ -1,5 +1,9 @@
-fastmcp==0.2.0
+# fastmcp 0.2.0 usaba pydantic.networks._BaseUrl que fue eliminado en pydantic
+# 2.7+, y su transitiva `mcp` ya pide pydantic>=2.11. Subimos a fastmcp 2.x
+# que vive en el código base actual y soporta pydantic moderno.
+fastmcp>=2.0,<3.0
 anthropic==0.34.2
 asyncpg==0.29.0
 httpx==0.27.2
-pydantic==2.9.0
+openai==1.44.0
+uvicorn[standard]==0.30.6

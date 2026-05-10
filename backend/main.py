@@ -10,8 +10,11 @@ from fastapi import FastAPI, Request
 from fastapi.middleware.cors import CORSMiddleware
 
 from config import settings
-from database import close_pool, health_check, init_pool
-from routers import auth, calendar, chat, courses, evaluations, materials, modules, signals, whatsapp
+from database import close_pool, init_pool
+from routers import (
+    auth, calendar, chat, courses, evaluations, health, materials,
+    modules, signals, whatsapp,
+)
 from scheduler import start_scheduler, stop_scheduler
 
 logging.basicConfig(
@@ -73,24 +76,8 @@ async def root():
     return {"service": "maestro-claudio", "status": "ok"}
 
 
-@app.get("/health")
-async def health():
-    return {
-        "status": "healthy",
-        "service": "maestro-claudio",
-        "version": "0.1.0",
-        "environment": settings.ENVIRONMENT,
-    }
-
-
-@app.get("/health/db")
-async def health_db():
-    return await health_check()
-
-
 # ── Routers ─────────────────────────────────────────────────────────────────
-# Fase 1: auth, courses, modules, evaluations.
-# Fase 2: materials, signals, chat.
+app.include_router(health.router)
 app.include_router(auth.router, prefix="/auth")
 app.include_router(courses.router)
 app.include_router(modules.router)
