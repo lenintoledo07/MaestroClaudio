@@ -11,8 +11,9 @@ Heurística PROFESOR / ALUMNO:
 from __future__ import annotations
 
 import logging
+import os
 from collections import defaultdict
-from typing import Any
+from typing import Any, Iterator
 
 import httpx
 
@@ -49,20 +50,25 @@ async def transcribe_video(file_path: str) -> dict[str, Any]:
         logger.warning("DEEPGRAM_API_KEY vacía, usando fallback Whisper")
         return await transcribe_fallback_whisper(file_path)
 
+    file_size = os.path.getsize(file_path)
     headers = {
         "Authorization": f"Token {settings.DEEPGRAM_API_KEY}",
         "Content-Type": "application/octet-stream",
+        # Content-Length explícito para evitar Transfer-Encoding: chunked,
+        # que Deepgram acepta peor para uploads grandes.
+        "Content-Length": str(file_size),
     }
 
-    # Streaming desde disco para no cargar archivos grandes en memoria.
+    # Streaming real desde disco con chunks de 4MB. La task corre en un worker
+    # con prefetch=1, así que bloquear el loop unos ms por read es aceptable
+    # — pero NUNCA cargamos el archivo completo a RAM.
     async with httpx.AsyncClient(timeout=httpx.Timeout(60 * 30)) as client:
-        with open(file_path, "rb") as fh:
-            resp = await client.post(
-                DEEPGRAM_URL,
-                params=DEEPGRAM_PARAMS,
-                headers=headers,
-                content=fh.read(),  # asyncio + sync read; OK por simplicidad
-            )
+        resp = await client.post(
+            DEEPGRAM_URL,
+            params=DEEPGRAM_PARAMS,
+            headers=headers,
+            content=_stream_file(file_path),
+        )
 
     if resp.status_code != 200:
         logger.error("Deepgram falló: %s %s", resp.status_code, resp.text[:300])
@@ -121,6 +127,17 @@ def _parse_deepgram_response(data: dict) -> dict[str, Any]:
 def _seconds_to_hms(seconds: float) -> str:
     s = int(seconds)
     return f"{s // 3600:02d}:{(s % 3600) // 60:02d}:{s % 60:02d}"
+
+
+def _stream_file(path: str, chunk_size: int = 4 * 1024 * 1024) -> Iterator[bytes]:
+    """Lee el archivo en chunks de 4MB. httpx itera el generador y stream-uploadea
+    al servidor sin cargar el archivo completo a RAM."""
+    with open(path, "rb") as fh:
+        while True:
+            chunk = fh.read(chunk_size)
+            if not chunk:
+                break
+            yield chunk
 
 
 # ─────────────────────────────────────────────────────────────────────────────

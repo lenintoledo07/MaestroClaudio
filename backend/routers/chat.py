@@ -7,9 +7,9 @@ import logging
 from typing import TYPE_CHECKING
 from uuid import UUID
 
-from fastapi import APIRouter, Depends, HTTPException, status
+from fastapi import APIRouter, BackgroundTasks, Depends, HTTPException, status
 
-from database import get_db
+from database import get_db, get_pool
 from models.schemas import ChatRequest, ChatResponse, ChatSource
 from services import claude_service, embeddings_service
 from services.auth_service import get_current_user
@@ -22,6 +22,25 @@ router = APIRouter(tags=["chat"])
 
 # Cuántos turnos previos enviamos a Claude como contexto (decisión sesión revisión)
 HISTORY_TURNS = 6
+
+
+async def _generate_and_save_title(conversation_id: UUID, query: str) -> None:
+    """BackgroundTask: genera el título de una conversación recién creada.
+
+    Corre fuera del request, así que abre su propia conexión del pool.
+    Nunca propaga errores — el título es nice-to-have."""
+    try:
+        title = await claude_service.generate_conversation_title(query)
+        if not title:
+            return
+        pool = get_pool()
+        async with pool.acquire() as conn:
+            await conn.execute(
+                "UPDATE conversations SET title = $1 WHERE id = $2",
+                title, conversation_id,
+            )
+    except Exception as exc:  # noqa: BLE001
+        logger.warning("title gen falló (no es bloqueante): %s", exc)
 
 
 # ── Conversaciones ──────────────────────────────────────────────────────────
@@ -99,10 +118,12 @@ async def delete_conversation(
 @router.post("/chat", response_model=ChatResponse)
 async def chat(
     payload: ChatRequest,
+    background_tasks: BackgroundTasks,
     user: dict = Depends(get_current_user),
     db: "asyncpg.Connection" = Depends(get_db),
 ):
     user_id = user["id"]
+    is_new_conversation = payload.conversation_id is None
 
     # 1. Conversación: crear nueva si no vino conversation_id
     conversation_id = payload.conversation_id
@@ -147,14 +168,46 @@ async def chat(
     )
     history = list(reversed([dict(r) for r in history_rows]))[:-1]
 
-    # 4. Buscar chunks similares
+    # 4. Buscar chunks similares (scoped al user para evitar cross-tenant leak)
     chunks = await embeddings_service.search_similar(
         conn=db,
         query=payload.query,
+        user_id=user_id,
         course_id=payload.course_id,
         module_id=payload.module_id,
         top_k=8,
     )
+
+    # 4.b — En modo exam_prep prepend exam_tips del curso como contexto extra
+    if payload.mode == "exam_prep" and payload.course_id is not None:
+        tip_rows = await db.fetch(
+            """
+            SELECT s.content, s.importance,
+                   m.name AS module_name, c.name AS course_name
+            FROM signals s
+            JOIN courses c ON c.id = s.course_id
+            LEFT JOIN modules m ON m.id = s.module_id
+            WHERE s.course_id = $1 AND s.type = 'exam_tip'
+            ORDER BY
+                CASE s.importance
+                    WHEN 'high' THEN 0 WHEN 'medium' THEN 1 ELSE 2
+                END,
+                s.created_at DESC
+            LIMIT 30
+            """,
+            payload.course_id,
+        )
+        exam_chunks = [
+            {
+                "content": f"[exam_tip importance={r['importance']}] {r['content']}",
+                "module_name": r["module_name"] or "general",
+                "course_name": r["course_name"],
+                "similarity": None,
+                "kind": "pinned",
+            }
+            for r in tip_rows
+        ]
+        chunks = exam_chunks + chunks
 
     # 5. Llamar a Claude
     answer = await claude_service.chat_rag(
@@ -176,8 +229,9 @@ async def chat(
         ChatSource(
             module_name=c.get("module_name"),
             course_name=c.get("course_name"),
-            similarity=float(c["similarity"]),
+            similarity=(float(c["similarity"]) if c.get("similarity") is not None else None),
             excerpt=(c["content"] or "")[:160],
+            kind=c.get("kind", "retrieved"),
         )
         for c in chunks
     ]
@@ -196,6 +250,12 @@ async def chat(
         "UPDATE conversations SET updated_at = NOW() WHERE id = $1",
         conversation_id,
     )
+
+    # 7. Título async (solo en el primer turn de una conversación nueva)
+    if is_new_conversation:
+        background_tasks.add_task(
+            _generate_and_save_title, conversation_id, payload.query
+        )
 
     return ChatResponse(
         conversation_id=conversation_id,

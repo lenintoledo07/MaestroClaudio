@@ -181,16 +181,20 @@ async def search_similar(
     *,
     conn: asyncpg.Connection,
     query: str,
+    user_id: UUID,
     course_id: UUID | None = None,
     module_id: UUID | None = None,
     chunk_types: list[str] | None = None,
     top_k: int = 8,
 ) -> list[dict]:
-    """Búsqueda vectorial. Devuelve chunks con similarity, module_name, course_name."""
+    """Búsqueda vectorial scoped al user. Devuelve chunks con similarity,
+    module_name, course_name. INNER JOIN courses + filtro user_id evita
+    cross-tenant leak: un chunk solo es alcanzable si pertenece a un curso
+    del user que llama."""
     embedding = await get_embedding(query)
 
-    where: list[str] = ["1 = 1"]
-    args: list = [_vec_to_pg(embedding)]
+    args: list = [_vec_to_pg(embedding), user_id]
+    where: list[str] = ["co.user_id = $2"]
 
     if course_id:
         args.append(course_id)
@@ -212,8 +216,8 @@ async def search_similar(
                co.name AS course_name,
                1 - (c.embedding <=> $1::vector) AS similarity
         FROM chunks c
-        LEFT JOIN modules m  ON c.module_id = m.id
-        LEFT JOIN courses co ON c.course_id = co.id
+        INNER JOIN courses co ON c.course_id = co.id
+        LEFT JOIN modules m   ON c.module_id  = m.id
         WHERE {' AND '.join(where)}
         ORDER BY c.embedding <=> $1::vector
         LIMIT ${len(args)}

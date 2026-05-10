@@ -237,8 +237,9 @@ class EvaluationUpcomingResponse(EvaluationResponse):
 class ChatSource(BaseModel):
     module_name: str | None = None
     course_name: str | None = None
-    similarity: float
+    similarity: float | None = None
     excerpt: str
+    kind: Literal["retrieved", "pinned"] = "retrieved"
 
 
 class ChatRequest(BaseModel):

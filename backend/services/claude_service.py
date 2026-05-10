@@ -342,20 +342,59 @@ async def generate_summary(
     course_name: str = "",
     module_name: str = "",
 ) -> str:
-    """Genera un resumen de 500-800 palabras del transcript, en prosa fluida."""
+    """Genera un resumen de 500-800 palabras del transcript, en prosa fluida.
+
+    Para transcripts largos (>_CHUNK_CHAR_LIMIT) hace map-reduce: resume cada
+    parte a ~300 palabras y luego consolida las parciales en el resumen final.
+    Antes truncábamos al primer _CHUNK_CHAR_LIMIT silenciosamente."""
     if not transcript.strip():
         return ""
 
-    client = _get_client()
     intro = ""
     if course_name or module_name:
         intro = f"Materia: {course_name}. Clase: {module_name}.\n\n"
 
-    user_prompt = (
-        f"{intro}Resume la siguiente clase en 500-800 palabras de prosa fluida, "
-        "apta para audio. Cierra con los 3 exam tips más importantes.\n\n"
-        f"TRANSCRIPCIÓN:\n{transcript[:_CHUNK_CHAR_LIMIT]}"
-    )
+    parts = _split_for_claude(transcript)
+    if len(parts) == 1:
+        return await _call_summary(parts[0], intro=intro, target="500-800")
+
+    logger.info("Summary map-reduce: %d partes", len(parts))
+    partials: list[str] = []
+    for i, part in enumerate(parts):
+        partial = await _call_summary(
+            part, intro=intro, target="250-350",
+            mark=f"[Parte {i + 1}/{len(parts)}]",
+        )
+        partials.append(partial)
+
+    combined = "\n\n".join(partials)
+    return await _call_summary(combined, intro=intro, target="500-800", reduce_pass=True)
+
+
+async def _call_summary(
+    text: str,
+    *,
+    intro: str,
+    target: str,
+    mark: str = "",
+    reduce_pass: bool = False,
+) -> str:
+    client = _get_client()
+    if reduce_pass:
+        instruction = (
+            f"Tenés varias síntesis parciales de la misma clase. Consolidá todo "
+            f"en un único resumen final de {target} palabras de prosa fluida, "
+            "apta para audio. Cierra con los 3 exam tips más importantes."
+        )
+    else:
+        instruction = (
+            f"{mark}Resume la siguiente clase en {target} palabras de prosa "
+            "fluida, apta para audio."
+        )
+        if not mark:
+            instruction += " Cierra con los 3 exam tips más importantes."
+
+    user_prompt = f"{intro}{instruction}\n\nTRANSCRIPCIÓN:\n{text}"
 
     msg = await client.messages.create(
         model=settings.CLAUDE_MODEL,
@@ -464,3 +503,26 @@ async def chat_rag(
         except json.JSONDecodeError:
             return _parse_json_response(answer)
     return answer
+
+
+async def generate_conversation_title(query: str) -> str:
+    """Resume el primer query en 4-6 palabras como título de la conversación."""
+    if not query.strip():
+        return ""
+    client = _get_client()
+    msg = await client.messages.create(
+        model=settings.CLAUDE_MODEL,
+        max_tokens=40,
+        messages=[
+            {
+                "role": "user",
+                "content": (
+                    "Resume la siguiente pregunta en un título de 4 a 6 palabras "
+                    "en español. Devuelve SOLO el título, sin comillas ni puntuación "
+                    f"final.\n\nPREGUNTA: {query}"
+                ),
+            }
+        ],
+    )
+    title = "".join(getattr(b, "text", "") for b in msg.content).strip()
+    return title.strip('"\'.').strip()[:120]
