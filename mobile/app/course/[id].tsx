@@ -5,7 +5,7 @@ import {
 } from 'react-native';
 import { Stack, useLocalSearchParams } from 'expo-router';
 import * as DocumentPicker from 'expo-document-picker';
-import { Audio } from 'expo-av';
+import { useAudioPlayer, useAudioPlayerStatus } from 'expo-audio';
 import { Ionicons } from '@expo/vector-icons';
 
 import { api, API_BASE, getToken } from '../../lib/api';
@@ -217,38 +217,33 @@ export default function CourseDetailScreen() {
 }
 
 function MaterialRow({ m }: { m: Material }) {
-  const [sound, setSound] = React.useState<Audio.Sound | null>(null);
-  const [playing, setPlaying] = React.useState(false);
+  const [token, setLocalToken] = React.useState<string | null>(null);
   const status = STATUS_LABEL[m.status] || { color: Colors.muted, text: m.status };
 
-  const togglePlay = async () => {
+  React.useEffect(() => {
+    if (m.audio_path) getToken().then(setLocalToken);
+  }, [m.audio_path]);
+
+  const audioSource = m.audio_path && token
+    ? { uri: `${API_BASE}/materials/${m.id}/audio`, headers: { Authorization: `Bearer ${token}` } }
+    : null;
+
+  const player = useAudioPlayer(audioSource as any);
+  const playerStatus = useAudioPlayerStatus(player);
+  const playing = playerStatus.playing;
+
+  const togglePlay = () => {
     if (!m.audio_path) {
       Alert.alert('Sin audio', 'Esta clase aún no tiene audio TTS generado.');
       return;
     }
     try {
-      if (sound) {
-        if (playing) { await sound.pauseAsync(); setPlaying(false); }
-        else { await sound.playAsync(); setPlaying(true); }
-        return;
-      }
-      const token = await getToken();
-      const url = `${API_BASE}/materials/${m.id}/audio`;
-      const { sound: s } = await Audio.Sound.createAsync(
-        { uri: url, headers: token ? { Authorization: `Bearer ${token}` } : undefined } as any,
-        { shouldPlay: true },
-      );
-      setSound(s);
-      setPlaying(true);
-      s.setOnPlaybackStatusUpdate((st: any) => {
-        if (st.didJustFinish) setPlaying(false);
-      });
+      if (playing) player.pause();
+      else player.play();
     } catch (e: any) {
       Alert.alert('Audio', e?.message || 'No se pudo reproducir');
     }
   };
-
-  React.useEffect(() => () => { sound?.unloadAsync().catch(() => {}); }, [sound]);
 
   return (
     <View style={styles.materialRow}>

@@ -30,7 +30,7 @@
       ["expo-splash-screen", { "backgroundColor": "#111111", "resizeMode": "contain" }]
     ],
     "extra": {
-      "apiUrl": "http://localhost:8001",
+      "apiUrl": "http://192.168.100.229:8001",
       "googleWebClientId": "810546691960-3grg89rm0fv4ammcjldkqe3q687uu1l5.apps.googleusercontent.com",
       "googleIosClientId": "",
       "googleAndroidClientId": ""

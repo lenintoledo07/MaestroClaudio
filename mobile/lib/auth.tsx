@@ -19,6 +19,7 @@ type AuthState = {
   user: User | null;
   loading: boolean;
   signIn: () => Promise<void>;
+  signInWithToken: (jwt: string) => Promise<void>;
   signOut: () => Promise<void>;
   request: any;
 };
@@ -38,9 +39,14 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
   const [user, setUser] = React.useState<User | null>(null);
   const [loading, setLoading] = React.useState(true);
 
+  // Fallback: si los iosClientId/androidClientId no están seteados (modo
+  // testing con atajo DEV), pasamos el webClientId. El hook no crashea, pero
+  // el botón Google no va a funcionar de verdad hasta crear los client IDs
+  // nativos. Ver memoria: project_mobile_oauth_pending.md
+  const fallbackId = extra.googleWebClientId || '';
   const [request, response, promptAsync] = Google.useAuthRequest({
-    iosClientId: extra.googleIosClientId || undefined,
-    androidClientId: extra.googleAndroidClientId || undefined,
+    iosClientId: extra.googleIosClientId || fallbackId,
+    androidClientId: extra.googleAndroidClientId || fallbackId,
     webClientId: extra.googleWebClientId || undefined,
     scopes: SCOPES,
   } as any);
@@ -99,6 +105,19 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     await promptAsync();
   }, [promptAsync]);
 
+  // Atajo DEV: pegar manualmente un JWT (sacado del cookie de la web).
+  // Se reemplaza por OAuth real cuando se configuren los iOS/Android client IDs.
+  const signInWithToken = React.useCallback(async (jwt: string) => {
+    await setToken(jwt);
+    try {
+      const me: User = await api.get('/auth/me', { silent401: true });
+      setUser(me);
+    } catch (e) {
+      await clearToken();
+      throw e;
+    }
+  }, []);
+
   const signOut = React.useCallback(async () => {
     try { await api.post('/auth/logout', null, { silent401: true }); } catch { /* ignore */ }
     await clearToken();
@@ -106,8 +125,8 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
   }, []);
 
   const value = React.useMemo(
-    () => ({ user, loading, signIn, signOut, request }),
-    [user, loading, signIn, signOut, request],
+    () => ({ user, loading, signIn, signInWithToken, signOut, request }),
+    [user, loading, signIn, signInWithToken, signOut, request],
   );
 
   return <AuthContext.Provider value={value}>{children}</AuthContext.Provider>;

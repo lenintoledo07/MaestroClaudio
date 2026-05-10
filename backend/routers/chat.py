@@ -168,15 +168,27 @@ async def chat(
     )
     history = list(reversed([dict(r) for r in history_rows]))[:-1]
 
-    # 4. Buscar chunks similares (scoped al user para evitar cross-tenant leak)
-    chunks = await embeddings_service.search_similar(
-        conn=db,
-        query=payload.query,
-        user_id=user_id,
-        course_id=payload.course_id,
-        module_id=payload.module_id,
-        top_k=8,
-    )
+    # 4. Buscar chunks similares (scoped al user para evitar cross-tenant leak).
+    # Si OpenAI falla (quota / red), seguimos sin RAG. Claude responde igual
+    # con su conocimiento general — mejor degradación que 500.
+    rag_warning: str | None = None
+    try:
+        chunks = await embeddings_service.search_similar(
+            conn=db,
+            query=payload.query,
+            user_id=user_id,
+            course_id=payload.course_id,
+            module_id=payload.module_id,
+            top_k=8,
+        )
+    except Exception as exc:  # noqa: BLE001
+        logger.warning("RAG falló (sigo sin contexto): %s", exc)
+        chunks = []
+        msg = str(exc)
+        if "insufficient_quota" in msg or "429" in msg:
+            rag_warning = "⚠️ La quota de OpenAI está agotada. Te respondo sin RAG (sin contexto de tus materiales)."
+        else:
+            rag_warning = f"⚠️ No pude buscar en tus materiales: {type(exc).__name__}. Te respondo sin RAG."
 
     # 4.b — En modo exam_prep prepend exam_tips del curso como contexto extra
     if payload.mode == "exam_prep" and payload.course_id is not None:
@@ -210,16 +222,23 @@ async def chat(
         chunks = exam_chunks + chunks
 
     # 5. Llamar a Claude
-    answer = await claude_service.chat_rag(
-        query=payload.query,
-        context_chunks=chunks,
-        history=history,
-        mode=payload.mode,
-    )
+    try:
+        answer = await claude_service.chat_rag(
+            query=payload.query,
+            context_chunks=chunks,
+            history=history,
+            mode=payload.mode,
+        )
+    except Exception as exc:  # noqa: BLE001
+        logger.exception("chat_rag falló")
+        raise HTTPException(
+            status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
+            detail=f"Claude no respondió: {type(exc).__name__}: {str(exc)[:200]}",
+        )
 
-    # 6. Persistir la respuesta
+    # 6. Persistir la respuesta (con warning RAG si lo hubo)
     if isinstance(answer, str):
-        answer_text = answer
+        answer_text = (rag_warning + "\n\n" + answer) if rag_warning else answer
         quiz_questions = None
     else:
         answer_text = json.dumps(answer, ensure_ascii=False)

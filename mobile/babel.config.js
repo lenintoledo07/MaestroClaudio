@@ -3,8 +3,9 @@ module.exports = function (api) {
   return {
     presets: ['babel-preset-expo'],
     plugins: [
-      // expo-router requiere reanimated SIEMPRE último.
-      'react-native-reanimated/plugin',
+      // En SDK 54 / reanimated 4, el plugin se movió a react-native-worklets.
+      // Este plugin tiene que ser SIEMPRE el último.
+      'react-native-worklets/plugin',
     ],
   };
 };
