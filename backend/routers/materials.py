@@ -186,6 +186,41 @@ async def upload_whatsapp_export(
     )
 
 
+@router.get("/materials", response_model=list[MaterialResponse])
+async def list_materials(
+    course_id: UUID | None = None,
+    module_id: UUID | None = None,
+    status: str | None = None,
+    limit: int = 100,
+    user: dict = Depends(get_current_user),
+    db: "asyncpg.Connection" = Depends(get_db),
+):
+    """Lista los materials del usuario. Filtros opcionales por curso/módulo/status.
+    Scoped por user_id via JOIN con courses (mismo patrón que search_similar)."""
+    args: list = [user["id"]]
+    where = ["c.user_id = $1"]
+    if course_id:
+        args.append(course_id)
+        where.append(f"m.course_id = ${len(args)}")
+    if module_id:
+        args.append(module_id)
+        where.append(f"m.module_id = ${len(args)}")
+    if status:
+        args.append(status)
+        where.append(f"m.status = ${len(args)}")
+    args.append(min(limit, 200))
+    sql = f"""
+        SELECT m.*
+        FROM materials m
+        JOIN courses c ON c.id = m.course_id
+        WHERE {' AND '.join(where)}
+        ORDER BY m.created_at DESC
+        LIMIT ${len(args)}
+    """
+    rows = await db.fetch(sql, *args)
+    return [MaterialResponse.model_validate(dict(r)) for r in rows]
+
+
 @router.get("/materials/{material_id}", response_model=MaterialResponse)
 async def get_material(
     material_id: UUID,
