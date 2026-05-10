@@ -1,34 +1,37 @@
-/* Maestro Claudio — Design System V3 "Abstract Intelligence" */
+/* Maestro Claudio — Design System V4 "Studious Calm"
+   Hybrid: Linear shell (low saturation) + Newsreader serif para contenido +
+   indigo apagado como acento. Pensado para sesiones largas de estudio. */
 
 :root {
-  /* Background scale (oscuro) */
-  --bg: #111111;
-  --bg2: #181818;
-  --bg3: #202020;
-  --bg4: #282828;
+  /* Background scale (warm dark) */
+  --bg: #0E0E10;
+  --bg2: #17171A;
+  --bg3: #1E1E22;
+  --bg4: #2A2A2E;
 
-  /* Marca: naranja */
-  --orange: #FF4D1C;
-  --orange2: #FF7A4D;
+  /* Acento: indigo apagado. La variable se llama --orange por compatibilidad
+     con el código existente — el VALOR es indigo. No es naranja real. */
+  --orange: #818CF8;
+  --orange2: #A5B4FC;
 
-  /* Tipos de señales pedagógicas */
+  /* Tipos de señales pedagógicas (status colors usados sólo donde importa) */
   --tip: #F59E0B;
-  --ref: #FF4D1C;
+  --ref: #818CF8;
   --qa: #22C55E;
   --pending: #EF4444;
 
-  /* Colores por materia (4 fijas del Master) */
-  --c-hacking: #FF4D1C;
-  --c-normativa: #8B5CF6;
-  --c-monitoring: #06B6D4;
-  --c-gobierno: #22C55E;
+  /* Colores por materia (4 fijas del Master) — versiones muteadas */
+  --c-hacking: #818CF8;
+  --c-normativa: #A78BFA;
+  --c-monitoring: #67E8F9;
+  --c-gobierno: #86EFAC;
 
   /* Texto + bordes */
-  --text: #EFEFEF;
-  --muted: #777777;
-  --muted2: #444444;
-  --border: #252525;
-  --border2: #303030;
+  --text: #F4F4F5;
+  --muted: #A1A1AA;
+  --muted2: #52525B;
+  --border: #27272A;
+  --border2: #323237;
 
   /* Espaciado (4px base) */
   --space-1: 4px;
@@ -62,23 +65,24 @@ body,
 
 body {
   position: relative;
-  font-family: 'DM Sans', -apple-system, BlinkMacSystemFont, sans-serif;
-  font-size: 14px;
+  font-family: 'Inter', -apple-system, BlinkMacSystemFont, sans-serif;
+  font-size: 13.5px;
   line-height: 1.5;
   background: var(--bg);
   color: var(--text);
   -webkit-font-smoothing: antialiased;
+  font-feature-settings: 'cv11', 'ss01';
   overflow-x: hidden;
 }
 
-/* Ambient glow naranja sutil — la "intelligence" del nombre del DS */
+/* Ambient glow indigo MUY sutil — apenas perceptible, sin saturar */
 body::before {
   content: '';
   position: fixed;
   inset: 0;
   background: radial-gradient(
     1200px circle at 80% -10%,
-    rgba(255, 77, 28, 0.10) 0%,
+    rgba(129, 140, 248, 0.06) 0%,
     transparent 50%
   );
   pointer-events: none;

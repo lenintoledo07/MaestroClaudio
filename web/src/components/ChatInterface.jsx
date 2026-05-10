@@ -105,12 +105,18 @@ function ChatMessage({ m }) {
     <div style={{ display: 'flex', justifyContent: isUser ? 'flex-end' : 'flex-start', marginBottom: 12 }}>
       <div style={{
         maxWidth: '78%',
-        background: isUser ? 'var(--orange)' : 'var(--bg3)',
-        color: isUser ? '#fff' : 'var(--text)',
-        padding: '10px 14px',
+        background: isUser ? 'var(--orange)' : 'var(--bg2)',
+        border: isUser ? 'none' : '1px solid var(--border)',
+        color: isUser ? '#0E0E10' : 'var(--text)',
+        padding: '12px 16px',
         borderRadius: 14,
-        fontSize: 14,
-        lineHeight: 1.5,
+        // Las respuestas del asistente son contenido para LEER → serif.
+        // Los mensajes del user son chrome/UI → sans-serif.
+        fontFamily: isUser
+          ? 'Inter, sans-serif'
+          : 'Newsreader, Georgia, serif',
+        fontSize: isUser ? 13.5 : 15,
+        lineHeight: isUser ? 1.5 : 1.6,
         whiteSpace: 'pre-wrap',
       }}>
         {m.content}

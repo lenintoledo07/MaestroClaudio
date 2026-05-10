@@ -86,7 +86,7 @@ export default function ClassDetail() {
         <div style={{ height: 70, borderRadius: 'var(--radius-lg)', overflow: 'hidden', marginBottom: 16, position: 'relative' }}>
           <AbstractArt courseCode={course?.code} width={1200} height={70} />
           <div style={{ position: 'absolute', inset: 0, display: 'flex', alignItems: 'center', padding: '0 24px' }}>
-            <h1 className="font-display" style={{ fontSize: 36, margin: 0 }}>{material.filename}</h1>
+            <h1 className="text-prose-title" style={{ fontSize: 32, margin: 0, color: 'var(--text)' }}>{material.filename}</h1>
           </div>
         </div>
 

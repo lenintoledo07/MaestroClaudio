@@ -71,7 +71,12 @@ export default function Dashboard() {
       </Text>
 
       <View style={styles.heroCard}>
-        <LinearGradient colors={['#FF4D1C', '#B33312', '#4d1808']} style={StyleSheet.absoluteFill} start={{ x: 0, y: 0 }} end={{ x: 1, y: 1 }} />
+        <LinearGradient
+          colors={['rgba(129,140,248,0.12)', 'rgba(129,140,248,0.02)']}
+          style={StyleSheet.absoluteFill}
+          start={{ x: 1, y: 0 }}
+          end={{ x: 0, y: 1 }}
+        />
         <Text style={styles.heroLabel}>CLASES PROCESADAS</Text>
         <Text style={styles.heroNumber}>{String(ready.length).padStart(2, '0')}</Text>
         <Text style={styles.heroSub}>{processing.length > 0 ? `${processing.length} procesando` : 'al día'}</Text>
@@ -156,10 +161,13 @@ const styles = StyleSheet.create({
     padding: Spacing.xl,
     overflow: 'hidden',
     marginBottom: Spacing.md,
+    backgroundColor: Colors.bg3,
+    borderWidth: 1,
+    borderColor: Colors.border,
   },
-  heroLabel: { fontFamily: Fonts.monoBold, fontSize: 10, letterSpacing: 1.5, color: 'rgba(255,255,255,0.85)' },
-  heroNumber: { fontFamily: Fonts.display, fontSize: 56, color: '#fff', lineHeight: 56, marginTop: 6 },
-  heroSub: { fontFamily: Fonts.body, fontSize: 13, color: 'rgba(255,255,255,0.85)', marginTop: 4 },
+  heroLabel: { fontFamily: Fonts.monoBold, fontSize: 10, letterSpacing: 0.8, color: Colors.muted },
+  heroNumber: { fontFamily: Fonts.display, fontSize: 44, color: Colors.orange, lineHeight: 44, marginTop: 6, letterSpacing: -1 },
+  heroSub: { fontFamily: Fonts.body, fontSize: 13, color: Colors.muted, marginTop: 4 },
   statRow: { flexDirection: 'row', gap: Spacing.md, marginBottom: Spacing.md },
   statMini: {
     flex: 1,

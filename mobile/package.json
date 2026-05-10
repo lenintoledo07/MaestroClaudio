@@ -12,6 +12,9 @@
   "dependencies": {
     "@expo-google-fonts/bebas-neue": "*",
     "@expo-google-fonts/dm-sans": "*",
+    "@expo-google-fonts/inter": "^0.4.2",
+    "@expo-google-fonts/jetbrains-mono": "^0.4.1",
+    "@expo-google-fonts/newsreader": "^0.4.1",
     "@expo-google-fonts/space-mono": "*",
     "@expo/vector-icons": "*",
     "@react-native-async-storage/async-storage": "2.2.0",
@@ -44,8 +47,8 @@
   },
   "devDependencies": {
     "@babel/core": "^7.24.0",
-    "babel-preset-expo": "~54.0.3",
     "@types/react": "~19.1.10",
+    "babel-preset-expo": "~54.0.3",
     "typescript": "*"
   }
 }

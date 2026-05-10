@@ -10,11 +10,11 @@
  */
 
 const PALETTES = {
-  HE:  { from: '#FF4D1C', to: '#FF7A4D', accent: '#F59E0B' },
-  CNR: { from: '#8B5CF6', to: '#C084FC', accent: '#A78BFA' },
-  MDM: { from: '#06B6D4', to: '#22D3EE', accent: '#67E8F9' },
-  GS:  { from: '#22C55E', to: '#4ADE80', accent: '#86EFAC' },
-  XX:  { from: '#444444', to: '#666666', accent: '#888888' },
+  HE:  { from: '#818CF8', to: '#A5B4FC', accent: '#C7D2FE' },  /* indigo */
+  CNR: { from: '#A78BFA', to: '#C084FC', accent: '#DDD6FE' },  /* purple */
+  MDM: { from: '#67E8F9', to: '#A5F3FC', accent: '#CFFAFE' },  /* cyan */
+  GS:  { from: '#86EFAC', to: '#BBF7D0', accent: '#DCFCE7' },  /* green */
+  XX:  { from: '#52525B', to: '#71717A', accent: '#A1A1AA' },
 };
 
 function paletteFor(courseCode) {

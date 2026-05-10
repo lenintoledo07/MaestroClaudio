@@ -1,32 +1,33 @@
-// Maestro Claudio — Design System V3 "Abstract Intelligence"
-// Mismos tokens que web/src/styles/tokens.css.
+// Maestro Claudio — Design System V4 "Studious Calm"
+// Espejo de web/src/styles/tokens.css. La key `orange` se mantiene
+// por compat con el código existente, pero el VALOR es indigo apagado.
 
 export const Colors = {
-  bg: '#111111',
-  bg2: '#181818',
-  bg3: '#202020',
-  bg4: '#282828',
+  bg: '#0E0E10',
+  bg2: '#17171A',
+  bg3: '#1E1E22',
+  bg4: '#2A2A2E',
 
-  orange: '#FF4D1C',
-  orange2: '#FF7A4D',
+  orange: '#818CF8',     // indigo apagado (no naranja)
+  orange2: '#A5B4FC',
 
-  // Tipos de señales
+  // Tipos de señales — solo donde de verdad importan
   tip: '#F59E0B',
-  ref: '#FF4D1C',
+  ref: '#818CF8',
   qa: '#22C55E',
   pending: '#EF4444',
 
-  // Por materia (4 fijas)
-  cHacking: '#FF4D1C',
-  cNormativa: '#8B5CF6',
-  cMonitoring: '#06B6D4',
-  cGobierno: '#22C55E',
+  // Por materia (4 fijas) — versiones muteadas
+  cHacking: '#818CF8',
+  cNormativa: '#A78BFA',
+  cMonitoring: '#67E8F9',
+  cGobierno: '#86EFAC',
 
-  text: '#EFEFEF',
-  muted: '#777777',
-  muted2: '#444444',
-  border: '#252525',
-  border2: '#303030',
+  text: '#F4F4F5',
+  muted: '#A1A1AA',
+  muted2: '#52525B',
+  border: '#27272A',
+  border2: '#323237',
 } as const;
 
 export const Spacing = {

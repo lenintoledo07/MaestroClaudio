@@ -130,8 +130,11 @@ export default function ChatScreen() {
               m.role === 'user' ? styles.bubbleUser : styles.bubbleAssistant,
             ]}>
               <Text style={{
-                color: m.role === 'user' ? '#fff' : Colors.text,
-                fontFamily: Fonts.body, fontSize: 14, lineHeight: 21,
+                color: m.role === 'user' ? Colors.bg : Colors.text,
+                // User: sans (chrome). Asistente: serif (contenido para leer).
+                fontFamily: m.role === 'user' ? Fonts.body : Fonts.serif,
+                fontSize: m.role === 'user' ? 14 : 16,
+                lineHeight: m.role === 'user' ? 20 : 24,
               }}>
                 {m.content}
               </Text>
@@ -204,7 +207,7 @@ const styles = StyleSheet.create({
     padding: 12, borderRadius: 14,
   },
   bubbleUser: { backgroundColor: Colors.orange },
-  bubbleAssistant: { backgroundColor: Colors.bg3 },
+  bubbleAssistant: { backgroundColor: Colors.bg2, borderWidth: 1, borderColor: Colors.border },
   sourcesBox: {
     marginTop: Spacing.sm,
     paddingTop: Spacing.sm,

@@ -2,14 +2,14 @@ import { useState } from 'react';
 import { api } from '../api/client';
 
 const COLORS = [
-  { key: 'orange',  hex: '#FF4D1C', name: 'Naranja' },
-  { key: 'purple',  hex: '#8B5CF6', name: 'Púrpura' },
-  { key: 'cyan',    hex: '#06B6D4', name: 'Cyan' },
-  { key: 'green',   hex: '#22C55E', name: 'Verde' },
+  { key: 'indigo',  hex: '#818CF8', name: 'Indigo' },
+  { key: 'purple',  hex: '#A78BFA', name: 'Púrpura' },
+  { key: 'cyan',    hex: '#67E8F9', name: 'Cyan' },
+  { key: 'green',   hex: '#86EFAC', name: 'Verde' },
   { key: 'amber',   hex: '#F59E0B', name: 'Ámbar' },
-  { key: 'pink',    hex: '#EC4899', name: 'Rosa' },
-  { key: 'blue',    hex: '#3B82F6', name: 'Azul' },
-  { key: 'red',     hex: '#EF4444', name: 'Rojo' },
+  { key: 'pink',    hex: '#F9A8D4', name: 'Rosa' },
+  { key: 'blue',    hex: '#93C5FD', name: 'Azul' },
+  { key: 'red',     hex: '#FCA5A5', name: 'Rojo' },
 ];
 
 export default function CourseModal({ course, onClose, onSaved }) {
@@ -18,7 +18,7 @@ export default function CourseModal({ course, onClose, onSaved }) {
     name: course?.name || '',
     code: course?.code || '',
     professor_name: course?.professor_name || '',
-    color: course?.color || 'orange',
+    color: course?.color || 'indigo',
     drive_folder_id: course?.drive_folder_id || '',
     status: course?.status || 'active',
   });

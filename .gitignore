@@ -37,3 +37,6 @@ Thumbs.db
 
 # Temp directory mounted in Docker workers
 /tmp/
+
+# Design exploration mockups (no commitear)
+.design-mockups/

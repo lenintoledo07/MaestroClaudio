@@ -1,56 +1,98 @@
-/* Maestro Claudio — Typography */
+/* Maestro Claudio — Typography V4 ("Studious Calm")
+   - Inter para UI / chrome / nav (neutral, no compite con el contenido)
+   - JetBrains Mono para data, timestamps, códigos de materia (terminal feel)
+   - Newsreader serif para CONTENIDO (summary, exam tips, chat respuestas).
+     Especficamente diseñada para lectura digital prolongada.
+   Bebas Neue + DM Sans + Space Mono se mantienen para compat (algunos
+   componentes los referenciaban). El display ahora usa Inter SemiBold. */
 
-@import url('https://fonts.googleapis.com/css2?family=Bebas+Neue&family=DM+Sans:wght@300;400;500;600&family=Space+Mono:wght@400;700&display=swap');
+@import url('https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=JetBrains+Mono:wght@400;500;600&family=Newsreader:ital,opsz,wght@0,6..72,400;0,6..72,500;0,6..72,600;1,6..72,400&family=Bebas+Neue&family=DM+Sans:wght@300;400;500;600&family=Space+Mono:wght@400;700&display=swap');
 
+/* Familias canónicas V4 */
 .font-display {
-  font-family: 'Bebas Neue', sans-serif;
-  letter-spacing: 0.02em;
+  font-family: 'Inter', sans-serif;
+  font-weight: 600;
+  letter-spacing: -0.02em;
 }
 
 .font-body {
-  font-family: 'DM Sans', sans-serif;
+  font-family: 'Inter', sans-serif;
+  letter-spacing: -0.005em;
 }
 
 .font-mono {
-  font-family: 'Space Mono', monospace;
+  font-family: 'JetBrains Mono', monospace;
+}
+
+/* NUEVO: serif para contenido (summary, transcript, respuestas chat) */
+.font-serif {
+  font-family: 'Newsreader', Georgia, serif;
+  letter-spacing: -0.005em;
 }
 
 .text-hero {
-  font-family: 'Bebas Neue', sans-serif;
-  font-size: 64px;
+  font-family: 'Inter', sans-serif;
+  font-weight: 600;
+  font-size: 44px;
   line-height: 1;
-  letter-spacing: 0.02em;
+  letter-spacing: -0.03em;
+  font-feature-settings: 'tnum';
 }
 
 .text-display {
-  font-family: 'Bebas Neue', sans-serif;
-  font-size: 32px;
-  line-height: 1.1;
-  letter-spacing: 0.02em;
+  font-family: 'Inter', sans-serif;
+  font-weight: 600;
+  font-size: 22px;
+  line-height: 1.2;
+  letter-spacing: -0.02em;
 }
 
 .text-title {
-  font-family: 'DM Sans', sans-serif;
+  font-family: 'Inter', sans-serif;
   font-weight: 600;
-  font-size: 18px;
+  font-size: 14px;
+  letter-spacing: -0.005em;
 }
 
 .text-body {
-  font-family: 'DM Sans', sans-serif;
+  font-family: 'Inter', sans-serif;
   font-weight: 400;
-  font-size: 14px;
+  font-size: 13.5px;
 }
 
 .text-small {
-  font-family: 'DM Sans', sans-serif;
+  font-family: 'Inter', sans-serif;
   font-weight: 400;
   font-size: 12px;
   color: var(--muted);
 }
 
 .text-mono-sm {
-  font-family: 'Space Mono', monospace;
-  font-size: 11px;
-  letter-spacing: 0.04em;
+  font-family: 'JetBrains Mono', monospace;
+  font-size: 10px;
+  letter-spacing: 0.08em;
   text-transform: uppercase;
+  font-weight: 500;
+}
+
+/* Variantes de contenido en serif (para summaries, transcripts, respuestas
+   del agente). Se aplican en componentes específicos, no globalmente. */
+.text-prose {
+  font-family: 'Newsreader', Georgia, serif;
+  font-size: 16px;
+  line-height: 1.65;
+  letter-spacing: -0.005em;
+}
+
+.text-prose-title {
+  font-family: 'Newsreader', Georgia, serif;
+  font-weight: 500;
+  font-size: 22px;
+  line-height: 1.25;
+  letter-spacing: -0.015em;
+}
+
+.text-prose-italic {
+  font-family: 'Newsreader', Georgia, serif;
+  font-style: italic;
 }
