@@ -2,31 +2,38 @@
   "expo": {
     "name": "Maestro Claudio",
     "slug": "maestro-claudio",
+    "scheme": "maestroclaudio",
     "version": "0.1.0",
     "orientation": "portrait",
-    "icon": "./assets/icon.png",
-    "userInterfaceStyle": "automatic",
+    "userInterfaceStyle": "dark",
     "splash": {
-      "image": "./assets/splash.png",
       "resizeMode": "contain",
-      "backgroundColor": "#0b0d10"
+      "backgroundColor": "#111111"
     },
     "assetBundlePatterns": ["**/*"],
     "ios": {
       "supportsTablet": true,
-      "bundleIdentifier": "com.maestroclaudio.app"
+      "bundleIdentifier": "com.lenintoledo.maestroclaudio"
     },
     "android": {
       "adaptiveIcon": {
-        "foregroundImage": "./assets/adaptive-icon.png",
-        "backgroundColor": "#0b0d10"
+        "backgroundColor": "#111111"
       },
-      "package": "com.maestroclaudio.app"
+      "package": "com.lenintoledo.maestroclaudio"
     },
     "web": {
-      "favicon": "./assets/favicon.png",
       "bundler": "metro"
     },
-    "plugins": ["expo-status-bar"]
+    "plugins": [
+      "expo-router",
+      "expo-notifications",
+      ["expo-splash-screen", { "backgroundColor": "#111111", "resizeMode": "contain" }]
+    ],
+    "extra": {
+      "apiUrl": "http://localhost:8001",
+      "googleWebClientId": "810546691960-3grg89rm0fv4ammcjldkqe3q687uu1l5.apps.googleusercontent.com",
+      "googleIosClientId": "",
+      "googleAndroidClientId": ""
+    }
   }
 }

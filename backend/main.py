@@ -13,7 +13,7 @@ from config import settings
 from database import close_pool, init_pool
 from routers import (
     auth, calendar, chat, courses, evaluations, health, materials,
-    modules, signals, whatsapp,
+    modules, signals, users, whatsapp,
 )
 from scheduler import start_scheduler, stop_scheduler
 
@@ -79,6 +79,7 @@ async def root():
 # ── Routers ─────────────────────────────────────────────────────────────────
 app.include_router(health.router)
 app.include_router(auth.router, prefix="/auth")
+app.include_router(users.router)
 app.include_router(courses.router)
 app.include_router(modules.router)
 app.include_router(evaluations.router)

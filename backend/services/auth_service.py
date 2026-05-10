@@ -99,10 +99,17 @@ async def get_current_user(
     request: Request,
     db: "asyncpg.Connection" = Depends(get_db),
 ) -> dict:
-    """Lee la cookie de sesión (cuyo nombre vive en settings), valida JWT y
-    retorna el usuario. Lanza 401 si falta o es inválida.
+    """Lee la sesión desde:
+      1) Authorization: Bearer <jwt>   (mobile / MCP / clientes server-side)
+      2) Cookie SESSION_COOKIE_NAME    (web)
+    El JWT es el mismo en ambos casos (mismo `create_session_token`).
     """
-    token = request.cookies.get(settings.SESSION_COOKIE_NAME)
+    token: str | None = None
+    auth_header = request.headers.get("authorization") or request.headers.get("Authorization")
+    if auth_header and auth_header.lower().startswith("bearer "):
+        token = auth_header.split(None, 1)[1].strip() or None
+    if not token:
+        token = request.cookies.get(settings.SESSION_COOKIE_NAME)
     if not token:
         raise HTTPException(
             status_code=status.HTTP_401_UNAUTHORIZED, detail="Sin sesión"

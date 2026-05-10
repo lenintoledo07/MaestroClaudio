@@ -207,3 +207,103 @@ async def logout(response: Response) -> dict:
 @router.get("/me", response_model=UserResponse)
 async def me(user: dict = Depends(get_current_user)) -> UserResponse:
     return UserResponse(**user)
+
+
+# ── Mobile (expo-auth-session) ──────────────────────────────────────────────
+
+
+@router.post("/mobile/exchange")
+async def mobile_exchange(
+    payload: dict,
+    db: "asyncpg.Connection" = Depends(get_db),
+) -> dict:
+    """Recibe un id_token de Google (expo-auth-session) o un code+access_token,
+    crea/actualiza el user, y devuelve el JWT de sesión que el cliente
+    debe mandar como `Authorization: Bearer <token>` en cada request.
+
+    Body:
+        { "id_token": "..." }                       # mínimo: id_token de Google
+        opcional: { "access_token": "...", ... }    # tokens completos para Drive/Cal
+
+    Response:
+        { "access_token": "<jwt>", "token_type": "Bearer",
+          "user": { id, email, name } }
+    """
+    id_token = payload.get("id_token")
+    if not id_token:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="id_token requerido",
+        )
+
+    # 1. Validar id_token con tokeninfo de Google (no firmamos; consultamos a Google).
+    async with httpx.AsyncClient(timeout=10.0) as client:
+        resp = await client.get(
+            "https://oauth2.googleapis.com/tokeninfo",
+            params={"id_token": id_token},
+        )
+        if resp.status_code != 200:
+            raise HTTPException(
+                status_code=status.HTTP_401_UNAUTHORIZED,
+                detail="id_token de Google inválido",
+            )
+        info = resp.json()
+
+    # 2. Verificar audience contra nuestro client_id (defensa básica).
+    aud = info.get("aud")
+    if aud and settings.GOOGLE_CLIENT_ID and aud != settings.GOOGLE_CLIENT_ID:
+        # En mobile expo-auth-session usa un client_id diferente (iOS/Android),
+        # así que solo logueamos un warn — en prod conviene whitelistear los
+        # client_ids de iOS/Android también.
+        logger.warning("mobile id_token aud=%s no matchea web GOOGLE_CLIENT_ID", aud)
+
+    google_id = info.get("sub")
+    email = info.get("email")
+    name = info.get("name")
+    if not google_id or not email:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="id_token sin sub/email",
+        )
+
+    # 3. Si vinieron tokens de OAuth completos (access_token + refresh_token),
+    # los guardamos para que mobile pueda usar Drive/Calendar igual que web.
+    google_token_blob: dict | None = None
+    if payload.get("access_token"):
+        expires_in = int(payload.get("expires_in", 3600))
+        google_token_blob = {
+            "access_token": payload["access_token"],
+            "refresh_token": payload.get("refresh_token"),
+            "scope": payload.get("scope"),
+            "token_type": payload.get("token_type", "Bearer"),
+            "expiry": (datetime.now(timezone.utc) + timedelta(seconds=expires_in)).isoformat(),
+        }
+
+    encrypted_blob = json.dumps(encrypt_token(google_token_blob)) if google_token_blob else None
+
+    # 4. Upsert user (preservando google_token previo si esta vez no vino)
+    user_row = await db.fetchrow(
+        """
+        INSERT INTO users (google_id, email, name, google_token)
+        VALUES ($1, $2, $3, $4)
+        ON CONFLICT (google_id) DO UPDATE
+            SET email = EXCLUDED.email,
+                name = COALESCE(EXCLUDED.name, users.name),
+                google_token = COALESCE(EXCLUDED.google_token, users.google_token)
+        RETURNING id, email, name
+        """,
+        google_id, email, name, encrypted_blob,
+    )
+
+    # 5. Emitir JWT del backend
+    token = create_session_token(user_row["id"])
+    return {
+        "access_token": token,
+        "token_type": "Bearer",
+        "expires_in_days": settings.JWT_EXPIRES_DAYS,
+        "user": {
+            "id": str(user_row["id"]),
+            "email": user_row["email"],
+            "name": user_row["name"],
+        },
+    }

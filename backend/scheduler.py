@@ -19,7 +19,7 @@ from apscheduler.schedulers.asyncio import AsyncIOScheduler
 from apscheduler.triggers.cron import CronTrigger
 
 from database import get_pool
-from services import calendar_service, whatsapp_service
+from services import calendar_service, push_notification_service, whatsapp_service
 
 logger = logging.getLogger(__name__)
 
@@ -31,12 +31,17 @@ _scheduler: AsyncIOScheduler | None = None
 
 
 async def notify_user(user_id, kind: str, payload: dict) -> None:
-    """Delega al service de WhatsApp. Si no está configurado, queda en log."""
+    """Despacha la notificación por todos los canales disponibles:
+       WhatsApp + push nativo. Cada uno es no-op si no está configurado."""
     logger.info("notify user=%s kind=%s", user_id, kind)
     try:
         await whatsapp_service.send_notification(user_id, kind, payload)
     except Exception as exc:  # noqa: BLE001
-        logger.warning("notify falló (no es bloqueante): %s", exc)
+        logger.warning("whatsapp notify falló (no es bloqueante): %s", exc)
+    try:
+        await push_notification_service.send_push(user_id, kind, payload)
+    except Exception as exc:  # noqa: BLE001
+        logger.warning("push notify falló (no es bloqueante): %s", exc)
 
 
 async def remind_upcoming_evaluations() -> None:
