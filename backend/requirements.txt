@@ -22,3 +22,6 @@ httpx==0.27.2
 pydantic==2.9.0
 pydantic-settings==2.5.0
 itsdangerous==2.2.0
+# Whisper local como fallback de Deepgram. Comentado por defecto: pesa ~2GB
+# (modelo small) y solo se necesita si Deepgram no está disponible.
+# openai-whisper==20231117
