@@ -40,6 +40,7 @@ class Settings(BaseSettings):
 
     # ── WhatsApp / Meta Cloud API ────────────────────────────────────────────
     META_API_VERSION: str = "v21.0"
+    META_APP_SECRET: str = ""  # Para verificar HMAC del webhook (X-Hub-Signature-256)
     WHATSAPP_TOKEN: str = ""
     WHATSAPP_PHONE_NUMBER_ID: str = ""
     WHATSAPP_WEBHOOK_VERIFY_TOKEN: str = ""

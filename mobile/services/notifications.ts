@@ -9,12 +9,23 @@ import { router } from 'expo-router';
 import { api } from '../lib/api';
 
 Notifications.setNotificationHandler({
+  // SDK 54: shouldShowAlert está deprecado a favor de shouldShowBanner+shouldShowList.
   handleNotification: async () => ({
-    shouldShowAlert: true,
+    shouldShowBanner: true,
+    shouldShowList: true,
     shouldPlaySound: true,
     shouldSetBadge: false,
   }),
 });
+
+// Allowlist de rutas válidas para data.route. Defensa contra payloads remotos
+// con rutas arbitrarias (ej. rutas internas no expuestas o intentos de hijacking
+// del flow de navegación). Si en el futuro se agregan tabs nuevos, ampliar.
+const _ROUTE_ALLOWLIST = /^\/(?:\(tabs\)(?:\/(?:index|courses|chat|calendar))?|course\/[A-Za-z0-9_-]+|login)$/;
+
+function _isAllowedRoute(route: string): boolean {
+  return _ROUTE_ALLOWLIST.test(route);
+}
 
 export async function registerForPushNotifications(): Promise<string | null> {
   if (!Device.isDevice) {
@@ -76,8 +87,14 @@ export function setupNotificationListeners() {
   // Usuario toca la notif (app cerrada o background) → routear según data.type
   _tapSub = Notifications.addNotificationResponseReceivedListener((response) => {
     const data: any = response.notification.request.content.data || {};
+    // data.route solo se acepta si matchea el allowlist. Cualquier otra cosa
+    // (rutas arbitrarias, javascript:, etc.) se descarta silenciosamente.
     if (data.route && typeof data.route === 'string') {
-      try { router.push(data.route as any); } catch { /* ruta inválida, ignorar */ }
+      if (_isAllowedRoute(data.route)) {
+        try { router.push(data.route as any); } catch { /* ignore */ }
+      } else {
+        console.warn('push: data.route no permitido, descartado:', data.route);
+      }
       return;
     }
     if (data.type === 'material_ready' && data.course_id) {

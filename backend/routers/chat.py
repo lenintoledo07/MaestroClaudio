@@ -199,7 +199,7 @@ async def chat(
             FROM signals s
             JOIN courses c ON c.id = s.course_id
             LEFT JOIN modules m ON m.id = s.module_id
-            WHERE s.course_id = $1 AND s.type = 'exam_tip'
+            WHERE s.course_id = $1 AND c.user_id = $2 AND s.type = 'exam_tip'
             ORDER BY
                 CASE s.importance
                     WHEN 'high' THEN 0 WHEN 'medium' THEN 1 ELSE 2
@@ -207,7 +207,7 @@ async def chat(
                 s.created_at DESC
             LIMIT 30
             """,
-            payload.course_id,
+            payload.course_id, user_id,
         )
         exam_chunks = [
             {

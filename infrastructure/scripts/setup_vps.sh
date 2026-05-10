@@ -103,6 +103,11 @@ if [[ ! -f "${ENV_FILE}" ]] || ! grep -q "^SECRET_KEY=." "${ENV_FILE}"; then
         log "5. Creando .env.production desde .env.example"
         cp "${APP_DIR}/.env.example" "${ENV_FILE}"
     fi
+    # Lock-down de permisos del .env: solo root puede leer (contiene API keys
+    # de Claude/OpenAI/Deepgram/ElevenLabs y SECRET_KEY). Sin esto, cualquier
+    # user del VPS los podía leer (umask 022 → 644).
+    chown root:root "${ENV_FILE}"
+    chmod 600 "${ENV_FILE}"
     warn "Editá ${ENV_FILE} y poblá:"
     warn "  - SECRET_KEY (generá: python3 -c 'import secrets; print(secrets.token_urlsafe(48))')"
     warn "  - DATABASE_URL  (postgresql://USER:PASS@host.docker.internal:${PG_PORT}/${POSTGRES_DB})"
@@ -113,11 +118,35 @@ if [[ ! -f "${ENV_FILE}" ]] || ! grep -q "^SECRET_KEY=." "${ENV_FILE}"; then
     exit 0
 fi
 
+# Endurecer perms aunque el archivo ya exista (idempotente, defensa-en-profundidad).
+chown root:root "${ENV_FILE}"
+chmod 600 "${ENV_FILE}"
+
 grep -q "^SECRET_KEY=." "${ENV_FILE}" || fail "Faltan claves en ${ENV_FILE}"
 
 # ── 6. Migraciones SQL ──────────────────────────────────────────────────────
 log "6. Migraciones SQL"
-DB_USER=$(grep -oE 'postgresql://[^:]+' "${ENV_FILE}" | sed 's|postgresql://||') || true
+# Parseamos el username de DATABASE_URL con Python (urlparse) — el grep+sed
+# anterior fallaba con esquemas como `postgresql+psycopg://` o passwords con
+# `:` y, peor, podía interpolar caracteres no validados en los GRANT (SQLi).
+DB_URL_RAW=$(grep -E '^DATABASE_URL=' "${ENV_FILE}" | head -1 | sed 's/^DATABASE_URL=//' | tr -d '"' | tr -d "'")
+DB_USER=$(python3 - <<PYEOF 2>/dev/null || true
+from urllib.parse import urlparse
+import re, sys
+u = urlparse("""${DB_URL_RAW}""")
+user = u.username or ""
+# Solo aceptamos identificadores Postgres seguros: [A-Za-z_][A-Za-z0-9_]*
+if not re.match(r"^[A-Za-z_][A-Za-z0-9_]{0,62}$", user):
+    sys.exit(0)
+print(user)
+PYEOF
+)
+for migration in "${APP_DIR}/infrastructure/migrations/"*.sql; do
+    [[ -f "$migration" ]] || continue
+    log "   aplicando $(basename "$migration")"
+    sudo -u postgres psql -d "${POSTGRES_DB}" -f "${migration}" >/dev/null 2>&1 \
+        || warn "Migración $(basename "$migration") ya aplicada o falló (revisá logs)."
+done
 for migration in "${APP_DIR}/infrastructure/migrations/"*.sql; do
     [[ -f "$migration" ]] || continue
     log "   aplicando $(basename "$migration")"
