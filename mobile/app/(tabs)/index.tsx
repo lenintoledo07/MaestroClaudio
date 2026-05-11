@@ -83,9 +83,9 @@ export default function Dashboard() {
       </View>
 
       <View style={styles.statRow}>
-        <StatMini label="Tips" value={stats.tips} />
-        <StatMini label="Refs" value={stats.refs} />
-        <StatMini label="Q&A"  value={stats.qa} />
+        <StatMini label="Tips" value={stats.tips} to="/signals/exam-tips" />
+        <StatMini label="Refs" value={stats.refs} to="/signals/references" />
+        <StatMini label="Q&A"  value={stats.qa}   to="/signals/qa" />
       </View>
 
       <SectionHeader title="Próxima evaluación" />
@@ -122,14 +122,19 @@ export default function Dashboard() {
   );
 }
 
-function StatMini({ label, value }: { label: string; value: number }) {
+function StatMini({ label, value, to }: { label: string; value: number; to?: string }) {
+  const router = useRouter();
+  const Container: any = to ? Pressable : View;
   return (
-    <View style={styles.statMini}>
+    <Container
+      style={styles.statMini}
+      onPress={to ? () => router.push(to as any) : undefined}
+    >
       <Text style={[TextStyles.monoSm, { color: Colors.muted }]}>{label}</Text>
       <Text style={[TextStyles.display, { color: Colors.text, fontSize: 28, marginTop: 2 }]}>
         {String(value).padStart(2, '0')}
       </Text>
-    </View>
+    </Container>
   );
 }
 
