@@ -8,10 +8,13 @@ import { Ionicons } from '@expo/vector-icons';
 import { api } from '../../lib/api';
 import { Colors, Spacing, Radius } from '../../constants/Colors';
 import { Fonts, TextStyles } from '../../constants/Typography';
+import QuizView from '../../components/QuizView';
+import FlashcardsView from '../../components/FlashcardsView';
 
 type Course = { id: string; name: string; code?: string | null };
 type Source = { module_name?: string; course_name?: string; similarity?: number | null; excerpt?: string; kind?: 'retrieved' | 'pinned' };
-type Message = { role: 'user' | 'assistant'; content: string; sources?: Source[]; mode?: string };
+type Structured = { type: 'quiz'; data: any[] } | { type: 'flashcards'; data: any[] };
+type Message = { role: 'user' | 'assistant'; content: string; sources?: Source[]; mode?: string; structured?: Structured | null };
 
 const MODES = [
   { key: 'explain',     label: 'Explicar' },
@@ -57,10 +60,22 @@ export default function ChatScreen() {
         query: q, conversation_id: conversationId, course_id: courseId, module_id: null, mode,
       });
       setConversationId(r.conversation_id);
+      // Para quiz el backend manda `quiz_questions` ya parseado. Para flashcards
+      // el array viene como JSON dentro de `answer`. Detectamos y renderizamos
+      // QuizView / FlashcardsView en vez del JSON crudo.
+      let structured: Structured | null = null;
+      if (r.mode === 'quiz' && Array.isArray(r.quiz_questions)) {
+        structured = { type: 'quiz', data: r.quiz_questions };
+      } else if (r.mode === 'flashcards') {
+        try {
+          const parsed = JSON.parse(r.answer);
+          if (Array.isArray(parsed)) structured = { type: 'flashcards', data: parsed };
+        } catch { /* deja content como fallback */ }
+      }
       setMessages((prev) => [...prev, {
         role: 'assistant',
         content: typeof r.answer === 'string' ? r.answer : JSON.stringify(r.answer, null, 2),
-        sources: r.sources, mode: r.mode,
+        sources: r.sources, mode: r.mode, structured,
       }]);
     } catch (e: any) {
       setMessages((prev) => [...prev, {
@@ -123,37 +138,60 @@ export default function ChatScreen() {
           </Text>
         )}
 
-        {messages.map((m, i) => (
-          <View key={i} style={{ marginBottom: Spacing.md, alignItems: m.role === 'user' ? 'flex-end' : 'flex-start' }}>
-            <View style={[
-              styles.bubble,
-              m.role === 'user' ? styles.bubbleUser : styles.bubbleAssistant,
-            ]}>
-              <Text style={{
-                color: m.role === 'user' ? Colors.bg : Colors.text,
-                // User: sans (chrome). Asistente: serif (contenido para leer).
-                fontFamily: m.role === 'user' ? Fonts.body : Fonts.serif,
-                fontSize: m.role === 'user' ? 14 : 16,
-                lineHeight: m.role === 'user' ? 20 : 24,
-              }}>
-                {m.content}
-              </Text>
+        {messages.map((m, i) => {
+          const isUser = m.role === 'user';
+          // Render estructurado para quiz/flashcards en lugar de texto JSON.
+          if (!isUser && m.structured) {
+            return (
+              <View key={i} style={{ marginBottom: Spacing.md }}>
+                {m.structured.type === 'quiz' && <QuizView questions={m.structured.data as any} />}
+                {m.structured.type === 'flashcards' && <FlashcardsView cards={m.structured.data as any} />}
+                {m.sources && m.sources.length > 0 && (
+                  <View style={[styles.sourcesBox, { marginTop: 8 }]}>
+                    <Text style={[TextStyles.monoSm, { color: Colors.muted, marginBottom: 6 }]}>FUENTES</Text>
+                    {m.sources.slice(0, 4).map((s, j) => (
+                      <Text key={j} style={{ color: Colors.muted, fontSize: 11, marginBottom: 3 }}>
+                        {s.kind === 'pinned' ? '📌 ' : '◇ '}
+                        {s.module_name || s.course_name || '—'}
+                        {s.similarity != null ? ` · ${(s.similarity * 100).toFixed(0)}%` : ''}
+                      </Text>
+                    ))}
+                  </View>
+                )}
+              </View>
+            );
+          }
+          return (
+            <View key={i} style={{ marginBottom: Spacing.md, alignItems: isUser ? 'flex-end' : 'flex-start' }}>
+              <View style={[
+                styles.bubble,
+                isUser ? styles.bubbleUser : styles.bubbleAssistant,
+              ]}>
+                <Text style={{
+                  color: isUser ? Colors.bg : Colors.text,
+                  fontFamily: isUser ? Fonts.body : Fonts.serif,
+                  fontSize: isUser ? 14 : 16,
+                  lineHeight: isUser ? 20 : 24,
+                }}>
+                  {m.content}
+                </Text>
 
-              {m.sources && m.sources.length > 0 && (
-                <View style={styles.sourcesBox}>
-                  <Text style={[TextStyles.monoSm, { color: 'rgba(255,255,255,0.7)', marginBottom: 6 }]}>FUENTES</Text>
-                  {m.sources.slice(0, 4).map((s, j) => (
-                    <Text key={j} style={{ color: 'rgba(255,255,255,0.85)', fontSize: 11, marginBottom: 3 }}>
-                      {s.kind === 'pinned' ? '📌 ' : '◇ '}
-                      {s.module_name || s.course_name || '—'}
-                      {s.similarity != null ? ` · ${(s.similarity * 100).toFixed(0)}%` : ''}
-                    </Text>
-                  ))}
-                </View>
-              )}
+                {m.sources && m.sources.length > 0 && (
+                  <View style={styles.sourcesBox}>
+                    <Text style={[TextStyles.monoSm, { color: 'rgba(255,255,255,0.7)', marginBottom: 6 }]}>FUENTES</Text>
+                    {m.sources.slice(0, 4).map((s, j) => (
+                      <Text key={j} style={{ color: 'rgba(255,255,255,0.85)', fontSize: 11, marginBottom: 3 }}>
+                        {s.kind === 'pinned' ? '📌 ' : '◇ '}
+                        {s.module_name || s.course_name || '—'}
+                        {s.similarity != null ? ` · ${(s.similarity * 100).toFixed(0)}%` : ''}
+                      </Text>
+                    ))}
+                  </View>
+                )}
+              </View>
             </View>
-          </View>
-        ))}
+          );
+        })}
       </ScrollView>
 
       <View style={styles.inputRow}>
