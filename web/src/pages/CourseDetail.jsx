@@ -126,7 +126,8 @@ export default function CourseDetail() {
           <div className="card" style={{ marginBottom: 20 }}>
             <h3 style={{ margin: '0 0 12px' }}>Subir material manualmente</h3>
             <p className="text-small" style={{ marginBottom: 12 }}>
-              Pegá la URL de un video específico de Drive, o subí un export .txt de WhatsApp.
+              Pegá la URL de un archivo de Drive (video/PDF/PPTX) <em>o de una carpeta entera</em> —
+              en ese caso se importan todos sus archivos elegibles. También podés subir un export .txt de WhatsApp.
             </p>
             <div className="field">
               <label>Semana</label>

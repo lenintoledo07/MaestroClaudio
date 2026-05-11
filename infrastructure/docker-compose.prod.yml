@@ -33,6 +33,10 @@ services:
     volumes:
       - ../audio:/app/audio
     env_file: ../.env.production
+    # PYTHONPATH=/app — sin esto, lazy imports de services.* dentro de las tasks
+    # fallan con ModuleNotFoundError (sys.path[0] queda en /usr/local/bin).
+    environment:
+      PYTHONPATH: /app
     command: celery -A workers.celery_app worker --loglevel=info --concurrency=2
     extra_hosts:
       - "host.docker.internal:host-gateway"

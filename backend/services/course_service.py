@@ -84,6 +84,12 @@ async def create_course(
         payload.drive_folder_id,
         payload.color,
     )
+    # Módulo default — sin esto el botón "Importar de Drive" queda disabled
+    # (firstModuleId en CourseDetail), bloqueando el flujo de ingesta.
+    await db.execute(
+        "INSERT INTO modules (course_id, name, week_number) VALUES ($1, $2, $3)",
+        course_id, "Módulo 1", 1,
+    )
     return await get_course(db, user_id, course_id)
 
 

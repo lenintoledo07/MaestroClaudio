@@ -1,24 +1,27 @@
 import { useEffect, useState } from 'react';
-import { useNavigate } from 'react-router-dom';
 import { useAuth } from '../hooks/useAuth';
 import { api } from '../api/client';
 
-const STEPS = ['Drive', 'Calendario', 'Listo'];
+const STEPS = ['Drive', 'Materias', 'Calendario', 'Listo'];
+
+// Paleta cíclica para asignar a las materias creadas automáticamente.
+const COLORS = ['#818CF8', '#A78BFA', '#67E8F9', '#86EFAC', '#FCD34D', '#F87171', '#FB923C'];
 
 export default function Onboarding() {
-  const { user, refresh } = useAuth();
-  const navigate = useNavigate();
+  const { user } = useAuth();
   const [step, setStep] = useState(0);
 
-  // Si el user ya tiene drive_folder_id arrancá en el paso 2.
+  // Si el user ya tiene drive_folder_id, saltá el paso 1.
   useEffect(() => {
     if (user?.drive_folder_id && step === 0) setStep(1);
   }, [user?.drive_folder_id]);  // eslint-disable-line react-hooks/exhaustive-deps
 
   const next = () => setStep((s) => Math.min(s + 1, STEPS.length - 1));
-  const finish = async () => {
-    await refresh?.();
-    navigate('/dashboard', { replace: true });
+  const finish = () => {
+    // Hard navigate: fuerza re-mount de TODO el tree (incluido ProtectedRoute),
+    // que va a hidratar el user state desde /auth/me sin depender de instancias
+    // separadas de useAuth (que no comparten state porque no hay Context).
+    window.location.assign('/dashboard');
   };
 
   return (
@@ -26,8 +29,9 @@ export default function Onboarding() {
       <div style={styles.card}>
         <Stepper step={step} />
         {step === 0 && <DriveStep onDone={next} />}
-        {step === 1 && <CalendarStep onDone={next} />}
-        {step === 2 && <DoneStep onFinish={finish} />}
+        {step === 1 && <CoursesStep onDone={next} />}
+        {step === 2 && <CalendarStep onDone={next} />}
+        {step === 3 && <DoneStep onFinish={finish} />}
       </div>
     </div>
   );
@@ -156,7 +160,145 @@ function DriveStep({ onDone }) {
   );
 }
 
-// ─── Step 2: Calendar ──────────────────────────────────────────────────────
+// ─── Step 2: Materias ──────────────────────────────────────────────────────
+
+function CoursesStep({ onDone }) {
+  const [folders, setFolders] = useState(null);
+  const [existing, setExisting] = useState(new Set());  // drive_folder_ids ya usados
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState(null);
+  const [selected, setSelected] = useState({});
+  const [creating, setCreating] = useState(false);
+  const [result, setResult] = useState(null);
+
+  useEffect(() => {
+    Promise.all([
+      api.get('/users/me/drive/folders'),       // subcarpetas de la carpeta raíz
+      api.get('/courses').catch(() => []),       // materias que ya existen
+    ])
+      .then(([fs, cs]) => {
+        const usedIds = new Set(cs.filter((c) => c.status !== 'deleted').map((c) => c.drive_folder_id).filter(Boolean));
+        setExisting(usedIds);
+        setFolders(fs);
+        // Default: marcar las que NO existen como materia todavía
+        setSelected(Object.fromEntries(fs.map((f) => [f.id, !usedIds.has(f.id)])));
+      })
+      .catch((e) => setError(e?.body?.detail || 'No pude listar tus subcarpetas'))
+      .finally(() => setLoading(false));
+  }, []);
+
+  const toggle = (id) => setSelected((s) => ({ ...s, [id]: !s[id] }));
+  const selectedCount = Object.values(selected).filter(Boolean).length;
+
+  const createAll = async () => {
+    const toCreate = folders.filter((f) => selected[f.id] && !existing.has(f.id));
+    setCreating(true);
+    let count = 0;
+    const errors = [];
+    for (let i = 0; i < toCreate.length; i++) {
+      const f = toCreate[i];
+      try {
+        await api.post('/courses', {
+          name: f.name,
+          drive_folder_id: f.id,
+          color: COLORS[i % COLORS.length],
+        });
+        count++;
+      } catch (e) {
+        errors.push({ name: f.name, msg: e?.body?.detail || `Error ${e?.status || ''}` });
+      }
+    }
+    setResult({ count, errors });
+    setCreating(false);
+  };
+
+  return (
+    <div>
+      <h2 style={{ marginBottom: 8 }}>Importá tus materias</h2>
+      <p className="text-small muted" style={{ marginBottom: 20, lineHeight: 1.6 }}>
+        Encontré estas subcarpetas en tu Drive. Cada una se va a crear como una materia
+        con su carpeta linkeada. Después podés importar los videos y archivos desde cada materia.
+      </p>
+
+      {loading && <p className="muted">Buscando subcarpetas…</p>}
+      {error && <p className="error" style={{ fontSize: 13 }}>{error}</p>}
+
+      {folders && folders.length === 0 && (
+        <p className="text-small muted">
+          No encontré subcarpetas dentro de tu carpeta raíz. Podés crear las materias después desde el Dashboard.
+        </p>
+      )}
+
+      {folders && folders.length > 0 && !result && (
+        <div className="col" style={{ gap: 6, maxHeight: 320, overflowY: 'auto' }}>
+          {folders.map((f, i) => {
+            const isExisting = existing.has(f.id);
+            return (
+              <label
+                key={f.id}
+                style={{
+                  display: 'flex', gap: 12, alignItems: 'center',
+                  padding: '10px 12px',
+                  background: 'var(--bg3)',
+                  border: '1px solid var(--border)',
+                  borderRadius: 'var(--radius-md)',
+                  cursor: isExisting ? 'default' : 'pointer',
+                  opacity: isExisting ? 0.55 : 1,
+                }}
+              >
+                <input
+                  type="checkbox"
+                  checked={!!selected[f.id]}
+                  disabled={isExisting}
+                  onChange={() => toggle(f.id)}
+                />
+                <div style={{ width: 10, height: 10, borderRadius: 5, background: COLORS[i % COLORS.length], flexShrink: 0 }} />
+                <span style={{ flex: 1 }}>{f.name}</span>
+                {isExisting && <span className="text-small muted">ya existe</span>}
+              </label>
+            );
+          })}
+        </div>
+      )}
+
+      {result && (
+        <div className="card" style={{ padding: 16 }}>
+          <p style={{ color: 'var(--orange)', marginBottom: 8 }}>
+            ✓ {result.count} {result.count === 1 ? 'materia creada' : 'materias creadas'}
+          </p>
+          {result.errors.length > 0 && (
+            <div className="text-small">
+              <p className="error" style={{ marginBottom: 6 }}>{result.errors.length} fallaron:</p>
+              <ul style={{ marginLeft: 16 }}>
+                {result.errors.map((e, i) => <li key={i}>{e.name}: {e.msg}</li>)}
+              </ul>
+            </div>
+          )}
+          <p className="text-small muted" style={{ marginTop: 12 }}>
+            Andá a cada materia desde el Dashboard para importar sus videos y archivos.
+          </p>
+        </div>
+      )}
+
+      <div className="row" style={{ gap: 8, marginTop: 24, justifyContent: 'space-between' }}>
+        <button className="btn btn-ghost" onClick={onDone}>Saltar por ahora</button>
+        {!result ? (
+          <button
+            className="btn btn-primary"
+            onClick={createAll}
+            disabled={creating || !folders || selectedCount === 0}
+          >
+            {creating ? 'Creando…' : `Crear ${selectedCount} ${selectedCount === 1 ? 'materia' : 'materias'}`}
+          </button>
+        ) : (
+          <button className="btn btn-primary" onClick={onDone}>Continuar</button>
+        )}
+      </div>
+    </div>
+  );
+}
+
+// ─── Step 3: Calendar ──────────────────────────────────────────────────────
 
 function CalendarStep({ onDone }) {
   const [syncing, setSyncing] = useState(false);
@@ -221,7 +363,7 @@ function CalendarStep({ onDone }) {
   );
 }
 
-// ─── Step 3: Done ──────────────────────────────────────────────────────────
+// ─── Step 4: Done ──────────────────────────────────────────────────────────
 
 function DoneStep({ onFinish }) {
   return (
@@ -232,8 +374,10 @@ function DoneStep({ onFinish }) {
         background: 'var(--orange)', color: '#fff', fontSize: 28,
       }}>✓</div>
       <h2 style={{ marginBottom: 8 }}>¡Listo!</h2>
-      <p className="text-small muted" style={{ marginBottom: 28, lineHeight: 1.6 }}>
-        Ya está todo conectado. Podés crear tu primera materia desde el Dashboard.
+      <p className="text-small muted" style={{ marginBottom: 20, lineHeight: 1.6 }}>
+        Ya está todo conectado. Para que el chat tenga contexto, andá a cualquier
+        materia desde el Dashboard e importá sus videos. El procesamiento corre en
+        segundo plano (transcripción + extracción de signals + embeddings).
       </p>
       <button className="btn btn-primary" onClick={onFinish}>
         Ir al Dashboard

@@ -39,6 +39,7 @@ class MaterialEnqueuedResponse(BaseModel):
     material_id: UUID
     status: str
     message: str
+    batch: list[UUID] | None = None  # si fue import de carpeta, todos los ids
 
 
 # ── Helpers ─────────────────────────────────────────────────────────────────
@@ -114,6 +115,15 @@ async def add_material_from_drive(
         )
 
     meta = await drive_service.get_file_metadata(user["id"], file_id)
+
+    # Caso A: es una carpeta → batch import de todos los archivos elegibles
+    # dentro (no recursivo). Cada uno crea su Material y se encola por separado.
+    if meta["mimeType"] == "application/vnd.google-apps.folder":
+        return await _batch_import_folder(
+            db, user["id"], module_id, module["course_id"], file_id,
+        )
+
+    # Caso B: archivo individual (comportamiento original)
     mtype = meta["type"]
     if mtype == "unknown":
         raise HTTPException(
@@ -142,6 +152,81 @@ async def add_material_from_drive(
         material_id=material_id,
         status="pending",
         message="Procesamiento iniciado",
+    )
+
+
+async def _batch_import_folder(
+    db: "asyncpg.Connection",
+    user_id: UUID,
+    module_id: UUID,
+    course_id: UUID,
+    folder_id: str,
+) -> MaterialEnqueuedResponse:
+    """Importa todos los archivos elegibles de una carpeta de Drive.
+
+    Evita duplicados: si ya existe un material con el mismo drive_file_id en
+    este módulo, se omite. Devuelve un response con `batch` listando todos
+    los ids creados; el primero va en `material_id` para compat del SSE
+    existente del frontend.
+    """
+    items = await drive_service.list_folder_contents(user_id, folder_id)
+    eligible = [
+        it for it in items
+        if drive_service.detect_file_type(it.get("mimeType", "")) != "unknown"
+    ]
+    if not eligible:
+        raise HTTPException(
+            status_code=400,
+            detail="La carpeta no tiene archivos soportados (video/pdf/pptx).",
+        )
+
+    existing_ids = {
+        r["drive_file_id"]
+        for r in await db.fetch(
+            "SELECT drive_file_id FROM materials WHERE module_id = $1 AND drive_file_id IS NOT NULL",
+            module_id,
+        )
+    }
+
+    created: list[UUID] = []
+    skipped = 0
+    for it in eligible:
+        if it["id"] in existing_ids:
+            skipped += 1
+            continue
+        # get_file_metadata trae duration_ms para videos; list_folder_contents no.
+        full = await drive_service.get_file_metadata(user_id, it["id"])
+        mtype = full["type"]
+        duration = (full["duration_ms"] // 1000) if full.get("duration_ms") else None
+        mid = await db.fetchval(
+            """
+            INSERT INTO materials (
+                module_id, course_id, type, filename,
+                drive_file_id, drive_url, duration_seconds, status
+            )
+            VALUES ($1, $2, $3, $4, $5, $6, $7, 'pending')
+            RETURNING id
+            """,
+            module_id, course_id, mtype, full["name"],
+            it["id"], full.get("webViewLink"), duration,
+        )
+        _enqueue_celery(mid)
+        created.append(mid)
+
+    if not created:
+        raise HTTPException(
+            status_code=409,
+            detail=f"Todos los {skipped} archivos ya estaban importados en este módulo.",
+        )
+
+    msg = f"{len(created)} archivos en cola"
+    if skipped:
+        msg += f" ({skipped} ya existían, se omitieron)"
+    return MaterialEnqueuedResponse(
+        material_id=created[0],
+        status="batch_enqueued",
+        message=msg,
+        batch=created,
     )
 
 

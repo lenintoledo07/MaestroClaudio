@@ -15,6 +15,7 @@ export default function MaterialUploader({ moduleId, onDone }) {
   const [materialId, setMaterialId] = useState(null);
   const [status, setStatus] = useState(null);
   const [error, setError] = useState(null);
+  const [batchMsg, setBatchMsg] = useState(null);
   const [driveUrl, setDriveUrl] = useState('');
   const [busy, setBusy] = useState(false);
   const [dragOver, setDragOver] = useState(false);
@@ -41,12 +42,17 @@ export default function MaterialUploader({ moduleId, onDone }) {
 
   const submitDrive = async () => {
     if (!driveUrl.trim()) return;
-    setBusy(true); setError(null);
+    setBusy(true); setError(null); setBatchMsg(null);
     try {
       const r = await api.post(`/modules/${moduleId}/materials/drive`, { drive_url: driveUrl.trim() });
       setMaterialId(r.material_id);
       setStatus(r.status || 'pending');
       setDriveUrl('');
+      if (r.batch && r.batch.length > 1) {
+        // Import de carpeta: mostramos el resumen y dejamos el SSE seguir
+        // al primer material (los demás procesan en background).
+        setBatchMsg(r.message);
+      }
     } catch (e) {
       setError(e.body?.detail || `Error ${e.status}`);
     } finally {
@@ -88,11 +94,11 @@ export default function MaterialUploader({ moduleId, onDone }) {
   return (
     <div className="col" style={{ gap: 12 }}>
       <div className="field">
-        <label>URL de Google Drive</label>
+        <label>URL de Google Drive (archivo o carpeta)</label>
         <div className="row">
           <input
             type="text"
-            placeholder="https://drive.google.com/..."
+            placeholder="https://drive.google.com/... (archivo o carpeta)"
             value={driveUrl}
             onChange={(e) => setDriveUrl(e.target.value)}
             disabled={busy || !!materialId}
@@ -123,6 +129,14 @@ export default function MaterialUploader({ moduleId, onDone }) {
         </div>
         <div className="text-small" style={{ marginTop: 8 }}>o hacé click para seleccionar</div>
       </div>
+
+      {batchMsg && (
+        <div className="card card-compact" style={{ borderColor: 'var(--orange)' }}>
+          <p className="text-small" style={{ margin: 0 }}>
+            ✓ {batchMsg}. El primero se muestra abajo en vivo; los demás procesan en background.
+          </p>
+        </div>
+      )}
 
       {materialId && (
         <div className="card card-compact">

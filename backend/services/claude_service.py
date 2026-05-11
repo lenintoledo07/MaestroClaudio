@@ -161,7 +161,9 @@ async def _call_extraction(transcript: str, *, model: str) -> dict[str, Any]:
     try:
         msg = await client.messages.create(
             model=model,
-            max_tokens=4096,
+            # 8192: con 4096 los transcripts largos hacían que Claude truncara la
+            # respuesta a mitad de JSON y _parse_json_response no podía reparar.
+            max_tokens=8192,
             system=[
                 {
                     "type": "text",
@@ -181,21 +183,100 @@ async def _call_extraction(transcript: str, *, model: str) -> dict[str, Any]:
 
 
 def _parse_json_response(text: str) -> dict[str, Any]:
-    """Parsea JSON. Si Claude responde con fences ``` o texto extra, los limpia."""
+    """Parsea JSON tolerando 3 fallas comunes de LLM:
+    1. Fences ```json``` envolviendo el JSON.
+    2. Texto extra antes/después del JSON.
+    3. Truncamiento por max_tokens (cierra estructuras abiertas a la fuerza).
+    """
     text = text.strip()
-    # Quitar ```json ... ``` o ``` ... ```
     fence = re.match(r"^```(?:json)?\s*(.*?)\s*```$", text, re.DOTALL)
     if fence:
         text = fence.group(1).strip()
     try:
         return json.loads(text)
     except json.JSONDecodeError:
-        # Último intento: extraer el primer bloque {...} balanceado
-        first = text.find("{")
-        last = text.rfind("}")
-        if first != -1 and last > first:
+        pass
+
+    first = text.find("{")
+    last = text.rfind("}")
+    if first != -1 and last > first:
+        try:
             return json.loads(text[first:last + 1])
-        raise
+        except json.JSONDecodeError:
+            pass
+
+    # Repair de truncamiento: encontrar último punto seguro y cerrar estructuras.
+    if first == -1:
+        raise json.JSONDecodeError("Sin objeto JSON en la respuesta", text, 0)
+    return _parse_repaired(text[first:])
+
+
+def _parse_repaired(s: str) -> dict[str, Any]:
+    """Cierra un JSON truncado. Busca la última posición segura para cortar
+    (después de un valor completo en un array/objeto a profundidad >= 1) y
+    agrega los cierres `}` / `]` necesarios.
+    """
+    stack: list[str] = []
+    in_str = False
+    esc = False
+    safe_pos = -1
+
+    for i, ch in enumerate(s):
+        if esc:
+            esc = False
+            continue
+        if in_str:
+            if ch == "\\":
+                esc = True
+            elif ch == '"':
+                in_str = False
+            continue
+        if ch == '"':
+            in_str = True
+            continue
+        if ch in "{[":
+            stack.append(ch)
+        elif ch in "}]":
+            if stack:
+                stack.pop()
+                if len(stack) >= 1:
+                    safe_pos = i + 1
+        elif ch == "," and len(stack) >= 1:
+            safe_pos = i
+
+    if safe_pos == -1:
+        raise json.JSONDecodeError("No pude reparar el JSON truncado", s, 0)
+
+    truncated = s[:safe_pos].rstrip().rstrip(",").rstrip()
+
+    # Recontar stack para saber qué cerrar
+    stack = []
+    in_str = False
+    esc = False
+    for ch in truncated:
+        if esc:
+            esc = False
+            continue
+        if in_str:
+            if ch == "\\":
+                esc = True
+            elif ch == '"':
+                in_str = False
+            continue
+        if ch == '"':
+            in_str = True
+            continue
+        if ch in "{[":
+            stack.append(ch)
+        elif ch in "}]" and stack:
+            stack.pop()
+
+    if in_str:
+        raise json.JSONDecodeError("JSON truncado dentro de un string", truncated, len(truncated))
+
+    closer = "".join("]" if c == "[" else "}" for c in reversed(stack))
+    logger.warning("Claude JSON truncado: recuperado %d chars, cerré con '%s'", safe_pos, closer)
+    return json.loads(truncated + closer)
 
 
 def _split_for_claude(text: str) -> list[str]:

@@ -13,7 +13,7 @@ from __future__ import annotations
 import logging
 import os
 from collections import defaultdict
-from typing import Any, Iterator
+from typing import Any, AsyncIterator
 
 import httpx
 
@@ -129,9 +129,10 @@ def _seconds_to_hms(seconds: float) -> str:
     return f"{s // 3600:02d}:{(s % 3600) // 60:02d}:{s % 60:02d}"
 
 
-def _stream_file(path: str, chunk_size: int = 4 * 1024 * 1024) -> Iterator[bytes]:
+async def _stream_file(path: str, chunk_size: int = 4 * 1024 * 1024) -> AsyncIterator[bytes]:
     """Lee el archivo en chunks de 4MB. httpx itera el generador y stream-uploadea
-    al servidor sin cargar el archivo completo a RAM."""
+    al servidor sin cargar el archivo completo a RAM. Async porque httpx.AsyncClient
+    requiere un async iterator en `content=` (versiones nuevas son estrictas)."""
     with open(path, "rb") as fh:
         while True:
             chunk = fh.read(chunk_size)

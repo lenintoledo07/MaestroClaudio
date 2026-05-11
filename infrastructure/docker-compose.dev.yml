@@ -38,6 +38,12 @@ services:
       - /tmp:/tmp                 # archivos temporales compartidos con el host
       - ../audio:/app/audio
     env_file: ../.env.local
+    # PYTHONPATH=/app: el script `celery` corre como `python /usr/local/bin/celery`,
+    # entonces sys.path[0] queda en /usr/local/bin y NO /app — el lazy import de
+    # `services.*` adentro de las tasks falla. PYTHONPATH lo soluciona en runtime
+    # sin tener que tocar el código de las tasks.
+    environment:
+      PYTHONPATH: /app
     command: celery -A workers.celery_app worker --loglevel=info --concurrency=1
     depends_on:
       redis:
