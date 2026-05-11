@@ -4,12 +4,33 @@ import { useAuth } from '../hooks/useAuth';
 import { api } from '../api/client';
 
 export default function Settings() {
-  const { user, logout } = useAuth();
+  const { user, logout, refresh } = useAuth();
   const [courses, setCourses] = useState([]);
+  const [driveFolder, setDriveFolder] = useState('');
+  const [savingDrive, setSavingDrive] = useState(false);
+  const [driveMsg, setDriveMsg] = useState(null);
 
   useEffect(() => {
     api.get('/courses').then((cs) => setCourses(cs.filter((c) => c.status !== 'deleted'))).catch(() => {});
   }, []);
+
+  useEffect(() => {
+    setDriveFolder(user?.drive_folder_id || '');
+  }, [user?.drive_folder_id]);
+
+  const saveDriveFolder = async () => {
+    setSavingDrive(true);
+    setDriveMsg(null);
+    try {
+      const r = await api.patch('/users/me', { drive_folder_id: driveFolder });
+      setDriveMsg({ type: 'ok', text: `✅ Conectado a "${r.drive_folder_id ? r.drive_folder_id.slice(0, 12) + '…' : 'desvinculado'}"` });
+      refresh?.();
+    } catch (e) {
+      setDriveMsg({ type: 'error', text: e?.body?.detail || `Error ${e?.status || ''}` });
+    } finally {
+      setSavingDrive(false);
+    }
+  };
 
   return (
     <div className="app-shell">
@@ -26,28 +47,62 @@ export default function Settings() {
             </button>
           </Section>
 
-          <Section title="Google Drive">
-            <p className="text-small">
-              Maestro Claudio lee los videos de tus clases desde Drive. Cambiá la carpeta raíz desde el modal de cada materia.
+          <Section title="Carpeta raíz de Google Drive">
+            <p className="text-small" style={{ marginBottom: 12 }}>
+              Pegá el link o el ID de la carpeta de Drive donde tenés organizado todo tu Master (con subcarpetas por materia: "Hacking Ético", "Normativa", etc).
+              Cuando crees una materia, vas a poder elegir su subcarpeta directamente de un dropdown.
+            </p>
+            <div className="field">
+              <label>Link o ID de la carpeta</label>
+              <input
+                type="text"
+                value={driveFolder}
+                onChange={(e) => setDriveFolder(e.target.value)}
+                placeholder="https://drive.google.com/drive/folders/1ABC..."
+              />
+            </div>
+            <div className="row" style={{ gap: 8 }}>
+              <button
+                className="btn btn-primary"
+                onClick={saveDriveFolder}
+                disabled={savingDrive}
+              >
+                {savingDrive ? 'Verificando…' : 'Guardar y verificar'}
+              </button>
+              {user?.drive_folder_id && (
+                <button
+                  className="btn btn-ghost"
+                  onClick={() => { setDriveFolder(''); }}
+                >
+                  Limpiar
+                </button>
+              )}
+            </div>
+            {driveMsg && (
+              <p className={driveMsg.type === 'error' ? 'error' : ''} style={{ marginTop: 12, fontSize: 13 }}>
+                {driveMsg.text}
+              </p>
+            )}
+            <p className="text-small" style={{ marginTop: 12 }}>
+              Cuando guardes, Maestro verifica que la carpeta exista y sea accesible con los permisos OAuth que diste.
             </p>
           </Section>
 
           <Section title="Notificaciones — WhatsApp">
             <p className="text-small">
-              Configurable cuando lleguemos a Fase 5 (calendar + WhatsApp). El número objetivo se setea via env <code>WHATSAPP_MY_NUMBER</code>.
+              Configurable cuando completes Meta WhatsApp Cloud API. El número objetivo se setea via env <code>WHATSAPP_MY_NUMBER</code>.
             </p>
           </Section>
 
           <Section title="Preferencias">
             <Row label="Voz de audio" value="Mateo (eleven_multilingual_v2)" />
-            <Row label="Tema" value="Dark V3 (único disponible)" />
+            <Row label="Tema" value="V4 Studious Calm" />
           </Section>
 
           <Section title="MCP Token">
             <p className="text-small">
-              Token para conectar Claude.ai como cliente MCP. Estará disponible cuando lleguemos a Fase 7.
+              Token para conectar Claude.ai como cliente MCP. Lo encontrás en <code>.env.production</code> del VPS.
             </p>
-            <button className="btn btn-ghost" disabled>Regenerar token</button>
           </Section>
         </div>
       </main>

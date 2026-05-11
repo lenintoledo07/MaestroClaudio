@@ -141,6 +141,50 @@ async def list_folder_contents(user_id: UUID, folder_id: str) -> list[dict]:
     return items
 
 
+async def list_subfolders(user_id: UUID, folder_id: str) -> list[dict]:
+    """Lista SOLO subcarpetas (no archivos). Útil para que el user elija
+    qué carpeta de su Drive raíz vincular a cada materia."""
+    creds = await _credentials_for_user(user_id)
+    service = build("drive", "v3", credentials=creds, cache_discovery=False)
+
+    items: list[dict] = []
+    page_token = None
+    while True:
+        resp = service.files().list(
+            q=(
+                f"'{folder_id}' in parents "
+                f"and mimeType = 'application/vnd.google-apps.folder' "
+                f"and trashed = false"
+            ),
+            fields="nextPageToken, files(id, name, modifiedTime)",
+            orderBy="name",
+            pageSize=200,
+            pageToken=page_token,
+            supportsAllDrives=True,
+            includeItemsFromAllDrives=True,
+        ).execute()
+        items.extend(resp.get("files", []))
+        page_token = resp.get("nextPageToken")
+        if not page_token:
+            break
+    return items
+
+
+async def get_folder_metadata(user_id: UUID, folder_id: str) -> dict:
+    """Devuelve nombre + id de una carpeta. Sirve para verificar que
+    el ID que pegó el user es realmente una carpeta accesible."""
+    creds = await _credentials_for_user(user_id)
+    service = build("drive", "v3", credentials=creds, cache_discovery=False)
+    f = service.files().get(
+        fileId=folder_id,
+        fields="id, name, mimeType",
+        supportsAllDrives=True,
+    ).execute()
+    if f.get("mimeType") != "application/vnd.google-apps.folder":
+        raise ValueError(f"El ID {folder_id} no es una carpeta de Drive")
+    return {"id": f["id"], "name": f["name"]}
+
+
 def extract_file_id_from_url(url: str) -> str | None:
     """Extrae el file_id de una URL de Drive (varios formatos)."""
     import re

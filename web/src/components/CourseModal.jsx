@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { useEffect, useState } from 'react';
 import { api } from '../api/client';
 
 const COLORS = [
@@ -24,8 +24,26 @@ export default function CourseModal({ course, onClose, onSaved }) {
   });
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState(null);
+  const [driveFolders, setDriveFolders] = useState(null);  // null=loading, []=sin root, [...]=list
+  const [driveErr, setDriveErr] = useState(null);
 
   const update = (k, v) => setForm((f) => ({ ...f, [k]: v }));
+
+  // Cargar subfolders del Drive raíz del user (si está configurado).
+  // Permite elegir la carpeta de la materia con un dropdown en vez de pegar IDs.
+  useEffect(() => {
+    api.get('/users/me/drive/folders', { silent401: true })
+      .then((folders) => setDriveFolders(folders))
+      .catch((e) => {
+        if (e.status === 400) {
+          // user no tiene drive_folder_id raíz configurado — caemos al input manual
+          setDriveFolders([]);
+        } else {
+          setDriveErr(e.body?.detail || `Error ${e.status}`);
+          setDriveFolders([]);
+        }
+      });
+  }, []);
 
   const submit = async () => {
     if (!form.name.trim()) { setError('El nombre es obligatorio'); return; }
@@ -85,16 +103,48 @@ export default function CourseModal({ course, onClose, onSaved }) {
 
         <div className="field">
           <label>Carpeta de Google Drive</label>
-          <input
-            value={form.drive_folder_id}
-            onChange={(e) => update('drive_folder_id', e.target.value)}
-            placeholder="https://drive.google.com/drive/folders/abc123..."
-          />
-          <span className="text-small">
-            Pegá el link completo de la carpeta (ej. <code>drive.google.com/drive/folders/&lt;id&gt;</code>) o solo el ID.
-            Una vez linkeada, vas a ver el botón "☁ Importar de Drive" en el detalle de la materia
-            con todos los videos disponibles para procesar.
-          </span>
+          {driveFolders === null && (
+            <span className="text-small">Cargando subcarpetas de tu Drive…</span>
+          )}
+          {driveFolders && driveFolders.length > 0 ? (
+            <>
+              <select
+                value={form.drive_folder_id}
+                onChange={(e) => update('drive_folder_id', e.target.value)}
+              >
+                <option value="">— Seleccioná una carpeta —</option>
+                {driveFolders.map((f) => (
+                  <option key={f.id} value={f.id}>{f.name}</option>
+                ))}
+                <option value="__manual__">📝 Pegar ID manualmente…</option>
+              </select>
+              {form.drive_folder_id === '__manual__' && (
+                <input
+                  style={{ marginTop: 8 }}
+                  value=""
+                  onChange={(e) => update('drive_folder_id', e.target.value)}
+                  placeholder="Pegá link o ID acá..."
+                  autoFocus
+                />
+              )}
+              <span className="text-small">
+                Subcarpetas de tu Drive raíz. Si la materia tiene una carpeta fuera de ahí, elegí "Pegar ID manualmente".
+              </span>
+            </>
+          ) : (
+            <>
+              <input
+                value={form.drive_folder_id}
+                onChange={(e) => update('drive_folder_id', e.target.value)}
+                placeholder="https://drive.google.com/drive/folders/abc123..."
+              />
+              <span className="text-small">
+                Pegá el link completo de la carpeta o el ID.
+                {' '}<strong>Tip:</strong> si configurás tu Drive raíz en <em>Ajustes → Carpeta raíz de Google Drive</em>, acá te aparece un dropdown con tus carpetas en vez de pegar IDs.
+              </span>
+            </>
+          )}
+          {driveErr && <span className="error text-small">{driveErr}</span>}
         </div>
 
         {editing && (
