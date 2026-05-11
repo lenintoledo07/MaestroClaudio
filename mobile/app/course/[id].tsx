@@ -12,6 +12,7 @@ import { api, API_BASE, getToken } from '../../lib/api';
 import { Colors, Spacing, Radius } from '../../constants/Colors';
 import { Fonts, TextStyles } from '../../constants/Typography';
 import AbstractArt from '../../components/AbstractArt';
+import MoveMaterialModal from '../../components/MoveMaterialModal';
 
 type Course = {
   id: string; name: string; code?: string | null; professor?: string | null;
@@ -47,6 +48,7 @@ export default function CourseDetailScreen() {
   const [showDrive, setShowDrive] = React.useState(false);
   const [driveFiles, setDriveFiles] = React.useState<DriveFile[] | null>(null);
   const [importingId, setImportingId] = React.useState<string | null>(null);
+  const [moveTarget, setMoveTarget] = React.useState<Material | null>(null);
 
   const load = React.useCallback(async () => {
     if (!id) return;
@@ -204,7 +206,12 @@ export default function CourseDetailScreen() {
                     {mats.length} material{mats.length !== 1 ? 'es' : ''}
                   </Text>
                   {mats.map((mat) => (
-                    <MaterialRow key={mat.id} m={mat} />
+                    <MaterialRow
+                      key={mat.id}
+                      m={mat}
+                      onMove={() => setMoveTarget(mat)}
+                      onDeleted={load}
+                    />
                   ))}
                 </View>
               );
@@ -212,11 +219,21 @@ export default function CourseDetailScreen() {
           </View>
         </View>
       </ScrollView>
+
+      {moveTarget && (
+        <MoveMaterialModal
+          material={moveTarget}
+          modules={modules}
+          courseId={id as string}
+          onClose={() => setMoveTarget(null)}
+          onMoved={() => { setMoveTarget(null); load(); }}
+        />
+      )}
     </>
   );
 }
 
-function MaterialRow({ m }: { m: Material }) {
+function MaterialRow({ m, onMove, onDeleted }: { m: Material; onMove: () => void; onDeleted: () => void }) {
   const [token, setLocalToken] = React.useState<string | null>(null);
   const status = STATUS_LABEL[m.status] || { color: Colors.muted, text: m.status };
 
@@ -261,7 +278,44 @@ function MaterialRow({ m }: { m: Material }) {
           <Ionicons name={playing ? 'pause' : 'play'} size={14} color="#fff" />
         </Pressable>
       )}
+      <Pressable onPress={() => openActions(m, onMove, onDeleted)} hitSlop={10} style={styles.menuBtn}>
+        <Ionicons name="ellipsis-horizontal" size={18} color={Colors.muted} />
+      </Pressable>
     </View>
+  );
+}
+
+function openActions(m: Material, onMove: () => void, onDeleted: () => void) {
+  Alert.alert(
+    m.filename || 'Material',
+    'Elegí una acción',
+    [
+      { text: 'Mover a otro módulo', onPress: onMove },
+      {
+        text: 'Eliminar',
+        style: 'destructive',
+        onPress: () => Alert.alert(
+          'Eliminar',
+          `Esto borra "${m.filename}" y todo su contenido procesado (signals, chunks, audio).`,
+          [
+            { text: 'Cancelar', style: 'cancel' },
+            {
+              text: 'Eliminar',
+              style: 'destructive',
+              onPress: async () => {
+                try {
+                  await api.del(`/materials/${m.id}`);
+                  onDeleted();
+                } catch (e: any) {
+                  Alert.alert('Error', e?.body?.detail || `HTTP ${e?.status || ''}`);
+                }
+              },
+            },
+          ],
+        ),
+      },
+      { text: 'Cancelar', style: 'cancel' },
+    ],
   );
 }
 
@@ -311,5 +365,10 @@ const styles = StyleSheet.create({
     width: 30, height: 30, borderRadius: 15,
     backgroundColor: Colors.orange,
     alignItems: 'center', justifyContent: 'center',
+  },
+  menuBtn: {
+    width: 28, height: 28, borderRadius: 6,
+    alignItems: 'center', justifyContent: 'center',
+    marginLeft: 4,
   },
 });
