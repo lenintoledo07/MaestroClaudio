@@ -18,7 +18,7 @@ export default function CourseModal({ course, onClose, onSaved }) {
     name: course?.name || '',
     code: course?.code || '',
     professor: course?.professor || '',
-    color: course?.color || 'indigo',
+    color: course?.color || '#818CF8',  // hex, NO el nombre del color (el backend valida ^#[0-9A-Fa-f]{6}$)
     drive_folder_id: course?.drive_folder_id || '',
     status: course?.status || 'active',
   });
@@ -105,13 +105,13 @@ export default function CourseModal({ course, onClose, onSaved }) {
           <div className="row" style={{ flexWrap: 'wrap', gap: 8 }}>
             {COLORS.map((c) => (
               <button
-                key={c.key}
+                key={c.hex}
                 type="button"
-                onClick={() => update('color', c.key)}
+                onClick={() => update('color', c.hex)}
                 title={c.name}
                 style={{
                   width: 32, height: 32, borderRadius: '50%', background: c.hex,
-                  border: form.color === c.key ? '2px solid var(--text)' : '2px solid transparent',
+                  border: form.color === c.hex ? '2px solid var(--text)' : '2px solid transparent',
                   cursor: 'pointer',
                 }}
               />
