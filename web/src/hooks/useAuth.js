@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useState } from 'react';
-import { api } from '../api/client';
+import { api, BASE } from '../api/client';
 
 export function useAuth() {
   const [user, setUser] = useState(null);
@@ -24,8 +24,10 @@ export function useAuth() {
   useEffect(() => { refresh(); }, [refresh]);
 
   const login = useCallback(() => {
-    // Full-page redirect (la cookie de sesión la setea el callback al volver).
-    window.location.assign('/api/auth/google');
+    // Full-page redirect al backend (cross-origin en prod, mismo origin con
+    // proxy vite en dev). BASE viene de api/client.js → resuelve a
+    // `/api` en dev y `https://study.denario.cloud/api` en prod.
+    window.location.assign(`${BASE}/auth/google`);
   }, []);
 
   const logout = useCallback(async () => {

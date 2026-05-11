@@ -136,13 +136,22 @@ async def _load_user(db: "asyncpg.Connection", user_id: UUID) -> dict:
 
 
 def make_session_cookie_kwargs(token: str) -> dict:
-    """Parámetros estándar para Response.set_cookie()."""
+    """Parámetros estándar para Response.set_cookie().
+
+    En production el frontend vive en otro dominio (Vercel) y el backend en
+    otro (study.denario.cloud) — sin `samesite=none` la cookie no se manda
+    en fetches cross-site y el SPA queda sin sesión. `none` REQUIERE `secure`
+    (lo respeta el cookie_secure property: True en prod).
+    En dev (http://localhost) samesite=none + secure=false no es válido, así
+    que ahí usamos `lax`. Lo decidimos por environment.
+    """
+    is_prod = settings.ENVIRONMENT == "production"
     return {
         "key": settings.SESSION_COOKIE_NAME,
         "value": token,
         "httponly": True,
         "secure": settings.cookie_secure,
-        "samesite": "lax",
+        "samesite": "none" if is_prod else "lax",
         "max_age": settings.JWT_EXPIRES_DAYS * 24 * 3600,
         "path": "/",
     }
