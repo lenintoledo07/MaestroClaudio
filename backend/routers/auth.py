@@ -20,6 +20,7 @@ from services.auth_service import (
     create_session_token,
     encrypt_token,
     get_current_user,
+    make_delete_cookie_kwargs,
     make_session_cookie_kwargs,
 )
 
@@ -200,7 +201,9 @@ async def google_callback(
 
 @router.post("/logout")
 async def logout(response: Response) -> dict:
-    response.delete_cookie(settings.SESSION_COOKIE_NAME, path="/")
+    # Los atributos deben matchear los del set-cookie original o el browser
+    # no la borra (silencioso). Ver make_delete_cookie_kwargs.
+    response.delete_cookie(**make_delete_cookie_kwargs())
     return {"message": "logged out"}
 
 

@@ -44,7 +44,10 @@ def encrypt_token(payload: dict) -> dict:
     return {"v": 1, "ct": ct}
 
 
-def decrypt_token(encrypted: dict) -> dict:
+def decrypt_token(encrypted) -> dict:
+    # asyncpg sin type codec devuelve JSONB como string crudo, no como dict
+    if isinstance(encrypted, str):
+        encrypted = json.loads(encrypted)
     if not encrypted or "ct" not in encrypted:
         raise ValueError("Token encriptado inválido")
     try:
@@ -154,6 +157,19 @@ def make_session_cookie_kwargs(token: str) -> dict:
         "samesite": "none" if is_prod else "lax",
         "max_age": settings.JWT_EXPIRES_DAYS * 24 * 3600,
         "path": "/",
+    }
+
+
+def make_delete_cookie_kwargs() -> dict:
+    """Atributos del Set-Cookie de borrado. Deben matchear los del cookie
+    original (path, secure, samesite) o el browser no la borra.
+    """
+    is_prod = settings.ENVIRONMENT == "production"
+    return {
+        "key": settings.SESSION_COOKIE_NAME,
+        "path": "/",
+        "secure": settings.cookie_secure,
+        "samesite": "none" if is_prod else "lax",
     }
 
 
