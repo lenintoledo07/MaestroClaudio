@@ -4,11 +4,9 @@ import CourseMenu from './CourseMenu';
 import { useAuth } from '../hooks/useAuth';
 
 const NAV_ITEMS = [
-  { label: 'Dashboard',    to: '/dashboard',   icon: '◈' },
-  { label: 'Exam Tips',    to: '/exam-tips',   icon: '★' },
-  { label: 'Calendario',   to: '/calendar',    icon: '▦' },
-  { label: 'Chat Global',  to: '/chat',        icon: '◍' },
-  { label: 'Referencias',  to: '/references',  icon: '↗' },
+  { label: 'Dashboard',    to: '/dashboard', icon: '◈' },
+  { label: 'Calendario',   to: '/calendar',  icon: '▦' },
+  { label: 'Chat Global',  to: '/chat',      icon: '◍' },
 ];
 
 function initials(name = '') {

@@ -4,6 +4,8 @@ import Login from './pages/Login';
 import Dashboard from './pages/Dashboard';
 import CourseDetail from './pages/CourseDetail';
 import ClassDetail from './pages/ClassDetail';
+import ChatPage from './pages/ChatPage';
+import CalendarPage from './pages/CalendarPage';
 import Settings from './pages/Settings';
 
 function ProtectedRoute({ children }) {
@@ -27,6 +29,8 @@ export default function App() {
         <Route path="/dashboard" element={<ProtectedRoute><Dashboard /></ProtectedRoute>} />
         <Route path="/course/:id" element={<ProtectedRoute><CourseDetail /></ProtectedRoute>} />
         <Route path="/class/:id" element={<ProtectedRoute><ClassDetail /></ProtectedRoute>} />
+        <Route path="/chat" element={<ProtectedRoute><ChatPage /></ProtectedRoute>} />
+        <Route path="/calendar" element={<ProtectedRoute><CalendarPage /></ProtectedRoute>} />
         <Route path="/settings" element={<ProtectedRoute><Settings /></ProtectedRoute>} />
         <Route path="*" element={<Navigate to="/dashboard" replace />} />
       </Routes>

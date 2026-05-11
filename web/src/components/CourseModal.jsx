@@ -17,7 +17,7 @@ export default function CourseModal({ course, onClose, onSaved }) {
   const [form, setForm] = useState({
     name: course?.name || '',
     code: course?.code || '',
-    professor_name: course?.professor_name || '',
+    professor: course?.professor || '',
     color: course?.color || 'indigo',
     drive_folder_id: course?.drive_folder_id || '',
     status: course?.status || 'active',
@@ -26,8 +26,23 @@ export default function CourseModal({ course, onClose, onSaved }) {
   const [error, setError] = useState(null);
   const [driveFolders, setDriveFolders] = useState(null);  // null=loading, []=sin root, [...]=list
   const [driveErr, setDriveErr] = useState(null);
+  const [manualMode, setManualMode] = useState(false);
 
   const update = (k, v) => setForm((f) => ({ ...f, [k]: v }));
+
+  // Convierte cualquier shape de error a string mostrable (FastAPI 422
+  // devuelve array de objetos {type, loc, msg, ...} que no se puede
+  // renderizar directo en React).
+  const errorToString = (detail) => {
+    if (!detail) return '';
+    if (typeof detail === 'string') return detail;
+    if (Array.isArray(detail)) {
+      return detail
+        .map((d) => `${(d.loc || []).slice(1).join('.')}: ${d.msg || 'inválido'}`)
+        .join(' · ');
+    }
+    try { return JSON.stringify(detail); } catch { return String(detail); }
+  };
 
   // Cargar subfolders del Drive raíz del user (si está configurado).
   // Permite elegir la carpeta de la materia con un dropdown en vez de pegar IDs.
@@ -48,15 +63,18 @@ export default function CourseModal({ course, onClose, onSaved }) {
   const submit = async () => {
     if (!form.name.trim()) { setError('El nombre es obligatorio'); return; }
     setBusy(true); setError(null);
+    // Sanitizar: no mandar el sentinel "__manual__" al backend.
+    const payload = { ...form };
+    if (payload.drive_folder_id === '__manual__') payload.drive_folder_id = '';
     try {
       if (editing) {
-        await api.patch(`/courses/${course.id}`, form);
+        await api.patch(`/courses/${course.id}`, payload);
       } else {
-        await api.post('/courses', form);
+        await api.post('/courses', payload);
       }
       onSaved?.();
     } catch (e) {
-      setError(e.body?.detail || `Error ${e.status}`);
+      setError(errorToString(e.body?.detail) || `Error ${e.status || ''}`);
     } finally {
       setBusy(false);
     }
@@ -79,7 +97,7 @@ export default function CourseModal({ course, onClose, onSaved }) {
 
         <div className="field">
           <label>Profesor/a</label>
-          <input value={form.professor_name} onChange={(e) => update('professor_name', e.target.value)} placeholder="Nombre del docente" />
+          <input value={form.professor} onChange={(e) => update('professor', e.target.value)} placeholder="Nombre del docente" />
         </div>
 
         <div className="field">
@@ -108,24 +126,40 @@ export default function CourseModal({ course, onClose, onSaved }) {
           )}
           {driveFolders && driveFolders.length > 0 ? (
             <>
-              <select
-                value={form.drive_folder_id}
-                onChange={(e) => update('drive_folder_id', e.target.value)}
-              >
-                <option value="">— Seleccioná una carpeta —</option>
-                {driveFolders.map((f) => (
-                  <option key={f.id} value={f.id}>{f.name}</option>
-                ))}
-                <option value="__manual__">📝 Pegar ID manualmente…</option>
-              </select>
-              {form.drive_folder_id === '__manual__' && (
-                <input
-                  style={{ marginTop: 8 }}
-                  value=""
-                  onChange={(e) => update('drive_folder_id', e.target.value)}
-                  placeholder="Pegá link o ID acá..."
-                  autoFocus
-                />
+              {!manualMode ? (
+                <select
+                  value={driveFolders.some((f) => f.id === form.drive_folder_id) ? form.drive_folder_id : ''}
+                  onChange={(e) => {
+                    if (e.target.value === '__manual__') {
+                      setManualMode(true);
+                      update('drive_folder_id', '');
+                    } else {
+                      update('drive_folder_id', e.target.value);
+                    }
+                  }}
+                >
+                  <option value="">— Seleccioná una carpeta —</option>
+                  {driveFolders.map((f) => (
+                    <option key={f.id} value={f.id}>{f.name}</option>
+                  ))}
+                  <option value="__manual__">📝 Pegar ID manualmente…</option>
+                </select>
+              ) : (
+                <>
+                  <input
+                    value={form.drive_folder_id}
+                    onChange={(e) => update('drive_folder_id', e.target.value)}
+                    placeholder="Pegá link o ID acá..."
+                    autoFocus
+                  />
+                  <span
+                    className="text-small"
+                    style={{ cursor: 'pointer', textDecoration: 'underline', marginTop: 4 }}
+                    onClick={() => { setManualMode(false); update('drive_folder_id', ''); }}
+                  >
+                    ← volver al dropdown
+                  </span>
+                </>
               )}
               <span className="text-small">
                 Subcarpetas de tu Drive raíz. Si la materia tiene una carpeta fuera de ahí, elegí "Pegar ID manualmente".
