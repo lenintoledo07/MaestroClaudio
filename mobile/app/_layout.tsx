@@ -24,10 +24,24 @@ function AuthGate({ children }: { children: React.ReactNode }) {
 
   React.useEffect(() => {
     if (loading) return;
-    const inAuthGroup = segments[0] === 'login';
-    if (!user && !inAuthGroup) {
+    const inLogin = segments[0] === 'login';
+    const inOnboarding = segments[0] === 'onboarding';
+
+    if (!user && !inLogin) {
       router.replace('/login');
-    } else if (user && inAuthGroup) {
+      return;
+    }
+    if (user && inLogin) {
+      router.replace('/(tabs)' as any);
+      return;
+    }
+    // Usuario logueado pero sin carpeta de Drive configurada → onboarding.
+    if (user && !user.drive_folder_id && !inOnboarding) {
+      router.replace('/onboarding' as any);
+      return;
+    }
+    // Ya configurado pero atrapado en onboarding (ej. F5 manual) → al dashboard.
+    if (user && user.drive_folder_id && inOnboarding) {
       router.replace('/(tabs)' as any);
     }
   }, [user, loading, segments]);
@@ -73,6 +87,7 @@ export default function RootLayout() {
         >
           <Stack.Screen name="(tabs)" options={{ headerShown: false }} />
           <Stack.Screen name="login" options={{ headerShown: false }} />
+          <Stack.Screen name="onboarding" options={{ headerShown: false }} />
           <Stack.Screen name="course/[id]" options={{ title: 'Materia' }} />
         </Stack>
       </AuthGate>

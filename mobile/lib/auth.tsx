@@ -13,6 +13,8 @@ type User = {
   id: string;
   email: string;
   name?: string | null;
+  // Si está vacío, el AuthGate redirige a /onboarding.
+  drive_folder_id?: string | null;
 };
 
 type AuthState = {
@@ -21,6 +23,7 @@ type AuthState = {
   signIn: () => Promise<void>;
   signInWithToken: (jwt: string) => Promise<void>;
   signOut: () => Promise<void>;
+  refresh: () => Promise<void>;
   request: any;
 };
 
@@ -124,9 +127,20 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     setUser(null);
   }, []);
 
+  // Re-fetch del user desde /auth/me. Necesario después del onboarding
+  // (cuando se setea drive_folder_id) para que el AuthGate deje pasar.
+  const refresh = React.useCallback(async () => {
+    try {
+      const me: User = await api.get('/auth/me', { silent401: true });
+      setUser(me);
+    } catch {
+      /* ignore */
+    }
+  }, []);
+
   const value = React.useMemo(
-    () => ({ user, loading, signIn, signInWithToken, signOut, request }),
-    [user, loading, signIn, signInWithToken, signOut, request],
+    () => ({ user, loading, signIn, signInWithToken, signOut, refresh, request }),
+    [user, loading, signIn, signInWithToken, signOut, refresh, request],
   );
 
   return <AuthContext.Provider value={value}>{children}</AuthContext.Provider>;
