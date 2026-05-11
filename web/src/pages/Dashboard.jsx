@@ -85,9 +85,9 @@ export default function Dashboard() {
               {processingCount > 0 ? `${processingCount} procesando` : 'al día'}
             </div>
           </div>
-          <StatMini label="Exam Tips"   value={stats.tips} />
-          <StatMini label="Referencias" value={stats.refs} />
-          <StatMini label="Q&A"         value={stats.qa} />
+          <StatMini label="Exam Tips"   value={stats.tips} to="/signals/exam-tips" />
+          <StatMini label="Referencias" value={stats.refs} to="/signals/references" />
+          <StatMini label="Q&A"         value={stats.qa}   to="/signals/qa" />
         </section>
 
         <div style={{ display: 'grid', gridTemplateColumns: '1fr 320px', gap: 28 }}>
@@ -134,9 +134,18 @@ export default function Dashboard() {
   );
 }
 
-function StatMini({ label, value }) {
+function StatMini({ label, value, to }) {
+  const navigate = useNavigate();
+  const interactive = !!to;
   return (
-    <div className="stat-mini">
+    <div
+      className="stat-mini"
+      onClick={interactive ? () => navigate(to) : undefined}
+      role={interactive ? 'button' : undefined}
+      tabIndex={interactive ? 0 : undefined}
+      onKeyDown={interactive ? (e) => (e.key === 'Enter' || e.key === ' ') && navigate(to) : undefined}
+      style={interactive ? { cursor: 'pointer' } : undefined}
+    >
       <div className="label">{label}</div>
       <div className="number">{String(value).padStart(2, '0')}</div>
       <div className="number-deco">{String(value).padStart(2, '0')}</div>

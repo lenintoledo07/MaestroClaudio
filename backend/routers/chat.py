@@ -11,7 +11,8 @@ from fastapi import APIRouter, BackgroundTasks, Depends, HTTPException, status
 
 from database import get_db, get_pool
 from models.schemas import ChatRequest, ChatResponse, ChatSource
-from services import claude_service, embeddings_service
+from config import settings
+from services import claude_service, embeddings_service, openai_chat_service
 from services.auth_service import get_current_user
 
 if TYPE_CHECKING:
@@ -221,19 +222,24 @@ async def chat(
         ]
         chunks = exam_chunks + chunks
 
-    # 5. Llamar a Claude
+    # 5. Llamar al LLM (provider configurable, default openai para ahorrar Claude).
+    chat_fn = (
+        openai_chat_service.chat_rag_openai
+        if settings.CHAT_PROVIDER == "openai"
+        else claude_service.chat_rag
+    )
     try:
-        answer = await claude_service.chat_rag(
+        answer = await chat_fn(
             query=payload.query,
             context_chunks=chunks,
             history=history,
             mode=payload.mode,
         )
     except Exception as exc:  # noqa: BLE001
-        logger.exception("chat_rag falló")
+        logger.exception("chat_rag falló (provider=%s)", settings.CHAT_PROVIDER)
         raise HTTPException(
             status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
-            detail=f"Claude no respondió: {type(exc).__name__}: {str(exc)[:200]}",
+            detail=f"LLM no respondió ({settings.CHAT_PROVIDER}): {type(exc).__name__}: {str(exc)[:200]}",
         )
 
     # 6. Persistir la respuesta (con warning RAG si lo hubo)

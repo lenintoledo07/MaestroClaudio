@@ -422,6 +422,71 @@ async def get_audio(
     return FileResponse(audio_path, media_type="audio/mpeg")
 
 
+class MaterialUpdateRequest(BaseModel):
+    module_id: UUID | None = None
+    filename: str | None = None
+
+
+@router.patch("/materials/{material_id}", response_model=MaterialResponse)
+async def update_material(
+    material_id: UUID,
+    payload: MaterialUpdateRequest,
+    user: dict = Depends(get_current_user),
+    db: "asyncpg.Connection" = Depends(get_db),
+):
+    """Edita módulo y/o filename de un material. Útil para reorganizar materiales
+    entre módulos cuando se subieron al equivocado."""
+    material = await _ensure_material_owned(db, user["id"], material_id)
+
+    updates: dict = {}
+    if payload.module_id is not None and payload.module_id != material["module_id"]:
+        # Validar que el módulo destino sea del MISMO curso (no permitir cross-course).
+        target = await db.fetchrow(
+            "SELECT id, course_id FROM modules WHERE id = $1",
+            payload.module_id,
+        )
+        if not target:
+            raise HTTPException(status_code=404, detail="Módulo destino no existe")
+        if target["course_id"] != material["course_id"]:
+            raise HTTPException(
+                status_code=400,
+                detail="El módulo destino pertenece a otro curso",
+            )
+        updates["module_id"] = payload.module_id
+
+    if payload.filename is not None and payload.filename.strip() != (material.get("filename") or "").strip():
+        if not payload.filename.strip():
+            raise HTTPException(status_code=400, detail="El filename no puede estar vacío")
+        updates["filename"] = payload.filename.strip()
+
+    if not updates:
+        # Sin cambios efectivos — devolvemos el material tal como está.
+        row = await db.fetchrow("SELECT * FROM materials WHERE id = $1", material_id)
+        return MaterialResponse(**dict(row))
+
+    set_parts = []
+    args: list = []
+    for i, (k, v) in enumerate(updates.items(), start=1):
+        set_parts.append(f"{k} = ${i}")
+        args.append(v)
+    args.append(material_id)
+    sql = f"UPDATE materials SET {', '.join(set_parts)} WHERE id = ${len(args)} RETURNING *"
+    row = await db.fetchrow(sql, *args)
+
+    # Si cambió el módulo, sincronizar también signals/chunks que tienen module_id
+    if "module_id" in updates:
+        await db.execute(
+            "UPDATE signals SET module_id = $1 WHERE material_id = $2",
+            updates["module_id"], material_id,
+        )
+        await db.execute(
+            "UPDATE chunks SET module_id = $1 WHERE material_id = $2",
+            updates["module_id"], material_id,
+        )
+
+    return MaterialResponse(**dict(row))
+
+
 @router.delete("/materials/{material_id}")
 async def delete_material(
     material_id: UUID,

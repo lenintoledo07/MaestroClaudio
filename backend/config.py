@@ -37,6 +37,10 @@ class Settings(BaseSettings):
     ELEVENLABS_API_KEY: str = ""
     ELEVENLABS_VOICE_ID: str = ""
     OPENAI_API_KEY: str = ""
+    OPENAI_CHAT_MODEL: str = "gpt-4o-mini"
+    # Provider del chat RAG. "openai" (default) usa gpt-4o-mini (barato).
+    # Signals/summary/title siempre van a Claude (mejor JSON estructurado largo).
+    CHAT_PROVIDER: Literal["claude", "openai"] = "openai"
 
     # ── WhatsApp / Meta Cloud API ────────────────────────────────────────────
     META_API_VERSION: str = "v21.0"

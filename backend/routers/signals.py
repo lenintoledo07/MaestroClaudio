@@ -73,6 +73,41 @@ async def _list_by_course(
     return [dict(r) for r in rows]
 
 
+# ── Cross-course (todo lo del user) ─────────────────────────────────────────
+
+
+@router.get("/signals")
+async def list_user_signals(
+    type: str = Query(..., pattern=r"^(exam_tip|reference|qa|pending_task|important_content)$"),
+    user: dict = Depends(get_current_user),
+    db: "asyncpg.Connection" = Depends(get_db),
+):
+    """Lista TODAS las signals del user de un type, con metadata enriquecida
+    para agrupar/contextualizar en el frontend. Cubre el Dashboard → vista de
+    signals (`/signals/:kind`)."""
+    rows = await db.fetch(
+        """
+        SELECT s.id, s.content, s.importance, s.timestamp_seconds, s.created_at,
+               s.type, s.speaker, s.context,
+               s.material_id, s.module_id, s.course_id,
+               c.name  AS course_name,
+               c.code  AS course_code,
+               c.color AS course_color,
+               m.name  AS module_name,
+               m.week_number,
+               mat.filename AS material_filename
+        FROM signals s
+        JOIN courses c ON c.id = s.course_id
+        LEFT JOIN modules m ON m.id = s.module_id
+        LEFT JOIN materials mat ON mat.id = s.material_id
+        WHERE s.type = $1 AND c.user_id = $2 AND c.status != 'deleted'
+        ORDER BY c.name ASC, m.week_number NULLS LAST, s.importance DESC, s.created_at DESC
+        """,
+        type, user["id"],
+    )
+    return [dict(r) for r in rows]
+
+
 # ── Por curso ───────────────────────────────────────────────────────────────
 
 

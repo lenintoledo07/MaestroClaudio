@@ -8,6 +8,7 @@ import ChatPage from './pages/ChatPage';
 import CalendarPage from './pages/CalendarPage';
 import Settings from './pages/Settings';
 import Onboarding from './pages/Onboarding';
+import SignalsPage from './pages/SignalsPage';
 
 function ProtectedRoute({ children, requireOnboarding = true }) {
   const { user, loading } = useAuth();
@@ -39,6 +40,7 @@ export default function App() {
         <Route path="/class/:id" element={<ProtectedRoute><ClassDetail /></ProtectedRoute>} />
         <Route path="/chat" element={<ProtectedRoute><ChatPage /></ProtectedRoute>} />
         <Route path="/calendar" element={<ProtectedRoute><CalendarPage /></ProtectedRoute>} />
+        <Route path="/signals/:kind" element={<ProtectedRoute><SignalsPage /></ProtectedRoute>} />
         <Route path="/settings" element={<ProtectedRoute><Settings /></ProtectedRoute>} />
         <Route path="*" element={<Navigate to="/dashboard" replace />} />
       </Routes>
