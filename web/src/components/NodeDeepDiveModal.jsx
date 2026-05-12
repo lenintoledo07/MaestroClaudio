@@ -92,5 +92,6 @@ const styles = {
   chatSection: {
     flex: 1, padding: 20, minHeight: 0,
     display: 'flex', flexDirection: 'column',
+    overflow: 'hidden',  // crea contexto de stacking para que el flex hijo pueda scrollear
   },
 };

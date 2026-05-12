@@ -87,7 +87,7 @@ export default function ChatInterface({ courseId, moduleId, materialId, initialQ
         ))}
       </div>
 
-      <div ref={scrollerRef} style={{ flex: 1, overflowY: 'auto', padding: 16 }}>
+      <div ref={scrollerRef} style={{ flex: 1, minHeight: 0, overflowY: 'auto', padding: 16 }}>
         {messages.length === 0 && (
           <p className="muted" style={{ textAlign: 'center', marginTop: 40 }}>
             Hacé una pregunta. El modo <b>Examen</b> usa también todos los exam-tips del curso como contexto.
