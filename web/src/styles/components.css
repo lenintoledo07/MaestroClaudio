@@ -827,3 +827,8 @@
   border-radius: 0;
   background: transparent;
 }
+
+/* Cursor parpadeando que aparece durante el streaming del chat */
+@keyframes mc-blink {
+  to { visibility: hidden; }
+}

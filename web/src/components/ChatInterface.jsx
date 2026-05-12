@@ -1,5 +1,5 @@
 import { useEffect, useRef, useState } from 'react';
-import { api } from '../api/client';
+import { api, BASE } from '../api/client';
 
 const MODES = [
   { key: 'explain',     label: 'Explicar' },
@@ -38,37 +38,122 @@ export default function ChatInterface({ courseId, moduleId, materialId, initialQ
     setBusy(true);
     setMessages((prev) => [...prev, { role: 'user', content: q }]);
     setInput('');
-    try {
-      const r = await api.post('/chat', {
-        query: q,
-        conversation_id: conversationId,
-        course_id: courseId || null,
-        module_id: moduleId || null,
-        mode,
-      });
-      setConversationId(r.conversation_id);
-      // Para quiz el backend manda `quiz_questions` ya parseado. Para flashcards
-      // el array viene como JSON dentro de `answer`. Detectamos y parseamos.
-      let structured = null;
-      if (r.mode === 'quiz' && Array.isArray(r.quiz_questions)) {
-        structured = { type: 'quiz', data: r.quiz_questions };
-      } else if (r.mode === 'flashcards') {
-        try {
-          const parsed = JSON.parse(r.answer);
-          if (Array.isArray(parsed)) structured = { type: 'flashcards', data: parsed };
-        } catch { /* deja que se muestre como texto */ }
+
+    // Quiz/flashcards no soportan streaming (necesitan JSON completo).
+    if (mode === 'quiz' || mode === 'flashcards') {
+      try {
+        const r = await api.post('/chat', {
+          query: q,
+          conversation_id: conversationId,
+          course_id: courseId || null,
+          module_id: moduleId || null,
+          mode,
+        });
+        setConversationId(r.conversation_id);
+        let structured = null;
+        if (r.mode === 'quiz' && Array.isArray(r.quiz_questions)) {
+          structured = { type: 'quiz', data: r.quiz_questions };
+        } else if (r.mode === 'flashcards') {
+          try {
+            const parsed = JSON.parse(r.answer);
+            if (Array.isArray(parsed)) structured = { type: 'flashcards', data: parsed };
+          } catch { /* texto crudo */ }
+        }
+        setMessages((prev) => [...prev, {
+          role: 'assistant', content: r.answer, sources: r.sources, mode: r.mode, structured,
+        }]);
+      } catch (e) {
+        setMessages((prev) => [...prev, { role: 'assistant', content: `Error: ${e.body?.detail || e.status}` }]);
+      } finally {
+        setBusy(false);
       }
-      setMessages((prev) => [...prev, {
-        role: 'assistant',
-        content: r.answer,
-        sources: r.sources,
-        mode: r.mode,
-        structured,
-      }]);
+      return;
+    }
+
+    // Modo explain/exam_prep: streaming SSE via fetch + ReadableStream.
+    // Pushear el bubble del asistente vacío, los tokens lo van llenando.
+    setMessages((prev) => [...prev, { role: 'assistant', content: '', mode, streaming: true }]);
+
+    let didError = false;
+    try {
+      const resp = await fetch(`${BASE}/chat/stream`, {
+        method: 'POST',
+        credentials: 'include',
+        headers: { 'Content-Type': 'application/json', 'Accept': 'text/event-stream' },
+        body: JSON.stringify({
+          query: q,
+          conversation_id: conversationId,
+          course_id: courseId || null,
+          module_id: moduleId || null,
+          mode,
+        }),
+      });
+      if (!resp.ok || !resp.body) {
+        throw new Error(`HTTP ${resp.status}`);
+      }
+
+      const reader = resp.body.getReader();
+      const decoder = new TextDecoder();
+      let buffer = '';
+
+      const appendToken = (text) => {
+        setMessages((prev) => {
+          const last = prev[prev.length - 1];
+          if (!last || last.role !== 'assistant') return prev;
+          return [...prev.slice(0, -1), { ...last, content: last.content + text }];
+        });
+      };
+      const finalize = (sources, conversation_id) => {
+        setMessages((prev) => {
+          const last = prev[prev.length - 1];
+          if (!last || last.role !== 'assistant') return prev;
+          return [...prev.slice(0, -1), { ...last, sources, streaming: false }];
+        });
+        if (conversation_id) setConversationId(conversation_id);
+      };
+
+      while (true) {
+        const { value, done } = await reader.read();
+        if (done) break;
+        buffer += decoder.decode(value, { stream: true });
+        // SSE: eventos separados por \n\n
+        const parts = buffer.split('\n\n');
+        buffer = parts.pop() || '';
+        for (const part of parts) {
+          const line = part.trim();
+          if (!line.startsWith('data:')) continue;
+          const dataStr = line.slice(5).trim();
+          if (!dataStr) continue;
+          try {
+            const evt = JSON.parse(dataStr);
+            if (evt.type === 'token') {
+              appendToken(evt.text || '');
+            } else if (evt.type === 'done') {
+              finalize(evt.sources, evt.conversation_id);
+            } else if (evt.type === 'error') {
+              didError = true;
+              appendToken(`\n\n⚠️ ${evt.message}`);
+            }
+          } catch (e) {
+            console.warn('SSE parse fail', e, dataStr);
+          }
+        }
+      }
     } catch (e) {
-      setMessages((prev) => [...prev, { role: 'assistant', content: `Error: ${e.body?.detail || e.status}` }]);
+      didError = true;
+      setMessages((prev) => {
+        const last = prev[prev.length - 1];
+        if (last?.role === 'assistant' && last.streaming) {
+          return [...prev.slice(0, -1), { ...last, content: `Error: ${e.message || e.body?.detail || e.status}`, streaming: false }];
+        }
+        return [...prev, { role: 'assistant', content: `Error: ${e.message || e.body?.detail || e.status}` }];
+      });
     } finally {
       setBusy(false);
+      if (!didError) {
+        // Limpiar flag streaming si quedó (caso: el done event llegó dentro del último read)
+        setMessages((prev) => prev.map((m) => (m.streaming ? { ...m, streaming: false } : m)));
+      }
     }
   };
 
@@ -151,9 +236,27 @@ function ChatMessage({ m }) {
         whiteSpace: 'pre-wrap',
       }}>
         {m.content}
+        {m.streaming && <BlinkingCursor />}
         {m.sources?.length > 0 && <SourcesList sources={m.sources} inline />}
       </div>
     </div>
+  );
+}
+
+function BlinkingCursor() {
+  return (
+    <span
+      style={{
+        display: 'inline-block',
+        width: 8,
+        height: '1em',
+        background: 'currentColor',
+        marginLeft: 2,
+        verticalAlign: '-2px',
+        animation: 'mc-blink 1s steps(2) infinite',
+        opacity: 0.7,
+      }}
+    />
   );
 }
 

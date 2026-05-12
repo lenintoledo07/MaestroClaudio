@@ -119,3 +119,58 @@ async def chat_rag_openai(
         return parsed
 
     return raw
+
+
+async def chat_rag_openai_stream(
+    *,
+    query: str,
+    context_chunks: list[dict],
+    history: list[dict] | None = None,
+    mode: str = "explain",
+):
+    """Versión streaming de chat_rag_openai. Async generator que yieldea cada
+    token (delta) a medida que llega. Solo modos prosa (explain/exam_prep);
+    quiz/flashcards requieren JSON completo y NO se pueden streamear.
+    """
+    if mode in ("quiz", "flashcards"):
+        raise ValueError("streaming no soporta modos estructurados (quiz/flashcards)")
+
+    client = _get_client()
+
+    context_text = "\n\n".join(
+        f"[{c.get('course_name', '?')} > {c.get('module_name', '?')}] {c['content']}"
+        for c in context_chunks
+    ) or "(sin contexto recuperado)"
+
+    if mode == "exam_prep":
+        instruction = (
+            "Consolidá los exam_tips, conceptos clave y Q&A relevantes para "
+            "preparar al estudiante. Respuesta en prosa, máximo 600 palabras."
+        )
+    else:
+        instruction = "Respondé de forma explicativa con base en el contexto."
+
+    user_prompt = (
+        f"CONTEXTO RECUPERADO:\n{context_text}\n\n"
+        f"INSTRUCCIÓN DE MODO ({mode}): {instruction}\n\n"
+        f"PREGUNTA: {query}"
+    )
+
+    messages: list[dict] = [{"role": "system", "content": SYSTEM_PROMPT_CHAT}]
+    if history:
+        for h in history[-6:]:
+            messages.append({"role": h["role"], "content": h["content"]})
+    messages.append({"role": "user", "content": user_prompt})
+
+    stream = await client.chat.completions.create(
+        model=settings.OPENAI_CHAT_MODEL,
+        messages=messages,
+        max_tokens=2048,
+        stream=True,
+    )
+    async for chunk in stream:
+        if not chunk.choices:
+            continue
+        delta = chunk.choices[0].delta.content
+        if delta:
+            yield delta

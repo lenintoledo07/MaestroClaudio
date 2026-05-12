@@ -105,9 +105,49 @@ async def embed_batch(texts: list[str]) -> list[list[float]]:
     return [d.embedding for d in resp.data]
 
 
+# Cache LRU+TTL para embeddings de queries de chat. La key es el texto
+# normalizado (strip + lower) — embedding-3-small es estable, así que la
+# misma pregunta dispara el mismo vector. TTL 1h para no almacenar
+# eternamente y limit de 2000 entries (~12 MB en RAM con float32).
+_QUERY_CACHE_TTL_S = 3600
+_QUERY_CACHE_MAX = 2000
+_query_cache: dict[str, tuple[float, list[float]]] = {}
+
+
+def _query_cache_get(key: str) -> list[float] | None:
+    import time
+    entry = _query_cache.get(key)
+    if not entry:
+        return None
+    ts, vec = entry
+    if time.monotonic() - ts > _QUERY_CACHE_TTL_S:
+        _query_cache.pop(key, None)
+        return None
+    return vec
+
+
+def _query_cache_put(key: str, vec: list[float]) -> None:
+    import time
+    if len(_query_cache) >= _QUERY_CACHE_MAX:
+        # Eviction simple: borrar el 20% más viejo. No es LRU estricto pero
+        # alcanza para este caso (caché de chat, no de embeddings de docs).
+        sorted_keys = sorted(_query_cache.items(), key=lambda kv: kv[1][0])
+        for k, _ in sorted_keys[: _QUERY_CACHE_MAX // 5]:
+            _query_cache.pop(k, None)
+    _query_cache[key] = (time.monotonic(), vec)
+
+
 async def get_embedding(text: str) -> list[float]:
-    """Embedding de un solo texto (atajo)."""
+    """Embedding de un solo texto. Cacheado con TTL 1h para ahorrar costos
+    y latencia en queries repetidas (típico cuando el user revisita la app)."""
+    key = (text or "").strip().lower()
+    if key:
+        cached = _query_cache_get(key)
+        if cached is not None:
+            return cached
     out = await embed_batch([text])
+    if key:
+        _query_cache_put(key, out[0])
     return out[0]
 
 
