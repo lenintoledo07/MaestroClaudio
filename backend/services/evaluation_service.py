@@ -120,6 +120,43 @@ async def approve_evaluation(
     return await get_evaluation(db, user_id, evaluation_id)
 
 
+async def move_evaluation(
+    db: "asyncpg.Connection",
+    user_id: UUID,
+    evaluation_id: UUID,
+    new_course_id: UUID,
+) -> EvaluationResponse:
+    """Reasigna una evaluation a otra materia del mismo user.
+
+    Útil cuando el material que originó la evaluation se procesó con el
+    course_id equivocado (ej. subido al módulo de otra materia por error)
+    y la auto-detección heredó ese error.
+    """
+    # Ownership de ambos cursos
+    owned = await db.fetchval(
+        """
+        SELECT 1
+        FROM evaluations e
+        JOIN courses c ON c.id = e.course_id AND c.user_id = $1
+        WHERE e.id = $2
+        """,
+        user_id, evaluation_id,
+    )
+    if not owned:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Evaluación no encontrada")
+    new_owned = await db.fetchval(
+        "SELECT 1 FROM courses WHERE id = $1 AND user_id = $2 AND status != 'deleted'",
+        new_course_id, user_id,
+    )
+    if not new_owned:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Materia destino no encontrada")
+    await db.execute(
+        "UPDATE evaluations SET course_id = $1 WHERE id = $2",
+        new_course_id, evaluation_id,
+    )
+    return await get_evaluation(db, user_id, evaluation_id)
+
+
 async def reject_evaluation(
     db: "asyncpg.Connection", user_id: UUID, evaluation_id: UUID
 ) -> dict:

@@ -6,6 +6,7 @@ from typing import TYPE_CHECKING
 from uuid import UUID
 
 from fastapi import APIRouter, Depends, Query
+from pydantic import BaseModel
 
 from database import get_db
 from models.schemas import (
@@ -70,6 +71,23 @@ async def reject_evaluation(
     db: "asyncpg.Connection" = Depends(get_db),
 ):
     return await evaluation_service.reject_evaluation(db, user["id"], evaluation_id)
+
+
+class _MoveBody(BaseModel):
+    course_id: UUID
+
+
+@router.post("/{evaluation_id}/move", response_model=EvaluationResponse)
+async def move_evaluation(
+    evaluation_id: UUID,
+    payload: _MoveBody,
+    user: dict = Depends(get_current_user),
+    db: "asyncpg.Connection" = Depends(get_db),
+):
+    """Reasigna la evaluation a otra materia (mismo user)."""
+    return await evaluation_service.move_evaluation(
+        db, user["id"], evaluation_id, payload.course_id
+    )
 
 
 @router.post("", response_model=EvaluationResponse, status_code=201)

@@ -4,16 +4,20 @@ import { api } from '../api/client';
 export default function EvaluationsTab({ courseId }) {
   const [evals, setEvals] = useState([]);
   const [pendingReview, setPendingReview] = useState([]);
+  const [courses, setCourses] = useState([]);
   const [showForm, setShowForm] = useState(false);
   const [form, setForm] = useState({ title: '', kind: 'parcial', due_date: '' });
+  const [moveOpenFor, setMoveOpenFor] = useState(null); // evaluation id con dropdown abierto
 
   const load = useCallback(async () => {
-    const [all, pending] = await Promise.all([
+    const [all, pending, cs] = await Promise.all([
       api.get('/evaluations').catch(() => []),
       api.get(`/evaluations/pending-review?course_id=${courseId}`).catch(() => []),
+      api.get('/courses').catch(() => []),
     ]);
     setEvals(all.filter((e) => e.course_id === courseId));
     setPendingReview(pending);
+    setCourses(cs.filter((c) => c.status !== 'deleted'));
   }, [courseId]);
 
   useEffect(() => { load(); }, [load]);
@@ -25,6 +29,12 @@ export default function EvaluationsTab({ courseId }) {
 
   const reject = async (id) => {
     await api.post(`/evaluations/${id}/reject`, {});
+    load();
+  };
+
+  const moveTo = async (id, newCourseId) => {
+    await api.post(`/evaluations/${id}/move`, { course_id: newCourseId });
+    setMoveOpenFor(null);
     load();
   };
 
@@ -60,17 +70,34 @@ export default function EvaluationsTab({ courseId }) {
           </div>
           <div className="col" style={{ gap: 8 }}>
             {pendingReview.map((e) => (
-              <div key={e.id} className="row" style={{ gap: 10, padding: '8px 0', borderTop: '1px solid var(--border)' }}>
-                <div style={{ flex: 1 }}>
-                  <div style={{ fontWeight: 500, fontSize: 14 }}>{e.title}</div>
-                  <div className="text-small muted">{e.due_date}</div>
+              <div key={e.id} className="col" style={{ gap: 6, padding: '8px 0', borderTop: '1px solid var(--border)' }}>
+                <div className="row" style={{ gap: 10 }}>
+                  <div style={{ flex: 1 }}>
+                    <div style={{ fontWeight: 500, fontSize: 14 }}>{e.title}</div>
+                    <div className="text-small muted">{e.due_date}</div>
+                  </div>
+                  <button className="btn btn-primary" style={{ padding: '6px 12px', fontSize: 12 }} onClick={() => approve(e.id)}>
+                    Aprobar
+                  </button>
+                  <button
+                    className="btn btn-ghost"
+                    style={{ padding: '6px 12px', fontSize: 12 }}
+                    onClick={() => setMoveOpenFor(moveOpenFor === e.id ? null : e.id)}
+                  >
+                    Reasignar
+                  </button>
+                  <button className="btn btn-ghost" style={{ padding: '6px 12px', fontSize: 12 }} onClick={() => reject(e.id)}>
+                    Rechazar
+                  </button>
                 </div>
-                <button className="btn btn-primary" style={{ padding: '6px 12px', fontSize: 12 }} onClick={() => approve(e.id)}>
-                  Aprobar
-                </button>
-                <button className="btn btn-ghost" style={{ padding: '6px 12px', fontSize: 12 }} onClick={() => reject(e.id)}>
-                  Rechazar
-                </button>
+                {moveOpenFor === e.id && (
+                  <MovePicker
+                    courses={courses}
+                    currentCourseId={e.course_id}
+                    onPick={(cid) => moveTo(e.id, cid)}
+                    onCancel={() => setMoveOpenFor(null)}
+                  />
+                )}
               </div>
             ))}
           </div>
@@ -115,10 +142,83 @@ export default function EvaluationsTab({ courseId }) {
               </div>
               <div className="text-small">{e.type || e.kind} · {e.due_date}</div>
             </div>
-            <button className="btn btn-ghost" onClick={() => remove(e.id)}>Eliminar</button>
+            <div className="row" style={{ gap: 6 }}>
+              {e.auto_detected && (
+                <button
+                  className="btn btn-ghost"
+                  style={{ padding: '6px 12px', fontSize: 12 }}
+                  onClick={() => setMoveOpenFor(moveOpenFor === e.id ? null : e.id)}
+                >
+                  Reasignar
+                </button>
+              )}
+              <button className="btn btn-ghost" onClick={() => remove(e.id)}>Eliminar</button>
+            </div>
           </div>
+          {moveOpenFor === e.id && (
+            <div style={{ marginTop: 10 }}>
+              <MovePicker
+                courses={courses}
+                currentCourseId={e.course_id}
+                onPick={(cid) => moveTo(e.id, cid)}
+                onCancel={() => setMoveOpenFor(null)}
+              />
+            </div>
+          )}
         </div>
       ))}
+    </div>
+  );
+}
+
+function MovePicker({ courses, currentCourseId, onPick, onCancel }) {
+  const others = courses.filter((c) => c.id !== currentCourseId);
+  return (
+    <div
+      style={{
+        background: 'var(--bg3)',
+        border: '1px solid var(--border2)',
+        borderRadius: 8,
+        padding: '10px 12px',
+      }}
+    >
+      <div className="text-mono-sm muted" style={{ marginBottom: 8, letterSpacing: 1.5 }}>
+        MOVER A OTRA MATERIA
+      </div>
+      <div className="col" style={{ gap: 4 }}>
+        {others.length === 0 && (
+          <div className="text-small muted">No hay otras materias.</div>
+        )}
+        {others.map((c) => (
+          <button
+            key={c.id}
+            onClick={() => onPick(c.id)}
+            className="row"
+            style={{
+              gap: 10,
+              padding: '6px 10px',
+              background: 'transparent',
+              border: 0,
+              borderRadius: 6,
+              color: 'var(--text)',
+              fontSize: 13,
+              textAlign: 'left',
+              cursor: 'pointer',
+            }}
+            onMouseEnter={(e) => { e.currentTarget.style.background = 'var(--bg4)'; }}
+            onMouseLeave={(e) => { e.currentTarget.style.background = 'transparent'; }}
+          >
+            <span style={{ width: 8, height: 8, borderRadius: '50%', background: c.color || 'var(--muted)' }} />
+            <span style={{ flex: 1 }}>{c.name}</span>
+            {c.code && <span className="text-mono-sm muted">{c.code}</span>}
+          </button>
+        ))}
+      </div>
+      <div className="row" style={{ marginTop: 6, justifyContent: 'flex-end' }}>
+        <button className="btn btn-ghost" style={{ padding: '4px 10px', fontSize: 11 }} onClick={onCancel}>
+          Cancelar
+        </button>
+      </div>
     </div>
   );
 }
