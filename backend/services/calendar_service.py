@@ -129,20 +129,39 @@ async def sync_user_calendar(user_id: UUID) -> dict[str, int]:
         if not courses:
             return {"synced": 0, "new": 0, "updated": 0}
 
+        # Listar TODOS los calendarios accesibles (primary + suscritos como
+        # ICS de la universidad). Si la llamada falla caemos a solo primary.
         try:
-            page = service.events().list(
-                calendarId="primary",
-                timeMin=time_min,
-                timeMax=time_max,
-                singleEvents=True,
-                orderBy="startTime",
-                maxResults=250,
-            ).execute()
+            cal_list = service.calendarList().list(maxResults=200).execute()
+            calendar_ids = [
+                c["id"] for c in cal_list.get("items", [])
+                # selected=False = el user lo ocultó en la UI, no lo miramos
+                if c.get("selected", True)
+            ] or ["primary"]
         except HttpError as exc:
-            logger.error("Calendar list falló: %s", exc)
-            raise
+            logger.warning("calendarList falló, uso solo primary: %s", exc)
+            calendar_ids = ["primary"]
 
-        items = page.get("items", [])
+        items: list[dict] = []
+        for cal_id in calendar_ids:
+            try:
+                page = service.events().list(
+                    calendarId=cal_id,
+                    timeMin=time_min,
+                    timeMax=time_max,
+                    singleEvents=True,
+                    orderBy="startTime",
+                    maxResults=250,
+                ).execute()
+                items.extend(page.get("items", []))
+            except HttpError as exc:
+                logger.warning("events.list falló para cal=%s: %s", cal_id, exc)
+                continue
+
+        logger.info(
+            "Calendar sync: user=%s calendars=%d events=%d",
+            user_id, len(calendar_ids), len(items),
+        )
         synced = new_n = updated_n = 0
 
         for raw in items:
