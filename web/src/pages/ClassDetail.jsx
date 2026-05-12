@@ -207,7 +207,11 @@ export default function ClassDetail() {
             {mindmap && (
               <>
                 <Suspense fallback={<p className="muted">Cargando renderer…</p>}>
-                  <MindMap markdown={mindmap.markdown} onNodeClick={setFocusedNode} />
+                  <MindMap
+                    markdown={mindmap.markdown}
+                    onNodeClick={setFocusedNode}
+                    filename={material?.filename ? `${material.filename}.md` : 'mapa-clase.md'}
+                  />
                 </Suspense>
                 <div className="row" style={{ marginTop: 12, gap: 12, alignItems: 'center', justifyContent: 'space-between' }}>
                   <span className="text-small muted">

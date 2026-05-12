@@ -7,6 +7,7 @@ from typing import TYPE_CHECKING
 from uuid import UUID
 
 from fastapi import APIRouter, Depends, HTTPException, Query, status
+from pydantic import BaseModel
 
 from database import get_db
 from models.schemas import (
@@ -15,7 +16,7 @@ from models.schemas import (
     CourseResponse,
     CourseUpdate,
 )
-from services import course_service, drive_service
+from services import course_service, drive_service, mindmap_service
 from services.auth_service import get_current_user
 
 logger = logging.getLogger(__name__)
@@ -173,3 +174,99 @@ async def list_course_drive_files(
     files.sort(key=lambda x: x.get("modified_time") or "", reverse=True)
     # Carpetas primero para que sean fáciles de ver
     return folders + files
+
+
+# ── Mind map agregado por curso ────────────────────────────────────────────
+
+
+class CourseMindMapResponse(BaseModel):
+    course_id: UUID
+    markdown: str
+    generated_at: str | None
+    cached: bool
+
+
+async def _ensure_course_owned(db, user_id, course_id):
+    owned = await db.fetchval(
+        "SELECT 1 FROM courses WHERE id = $1 AND user_id = $2 AND status != 'deleted'",
+        course_id, user_id,
+    )
+    if not owned:
+        raise HTTPException(status_code=404, detail="Curso no encontrado")
+
+
+@router.get("/{course_id}/mindmap", response_model=CourseMindMapResponse)
+async def get_course_mindmap(
+    course_id: UUID,
+    user: dict = Depends(get_current_user),
+    db: "asyncpg.Connection" = Depends(get_db),
+):
+    """Devuelve el mapa conceptual AGREGADO del curso, o lo genera al vuelo
+    si no existe. Primera invocación dispara Claude Sonnet (~$0.05, ~15-25s)
+    porque es agregación cruzada de signals. Las siguientes se sirven cacheadas.
+    """
+    await _ensure_course_owned(db, user["id"], course_id)
+    row = await db.fetchrow(
+        "SELECT mind_map_markdown, mind_map_generated_at FROM courses WHERE id = $1",
+        course_id,
+    )
+    if row and row["mind_map_markdown"]:
+        return CourseMindMapResponse(
+            course_id=course_id,
+            markdown=row["mind_map_markdown"],
+            generated_at=row["mind_map_generated_at"].isoformat() if row["mind_map_generated_at"] else None,
+            cached=True,
+        )
+
+    try:
+        markdown = await mindmap_service.generate_course_mindmap(db, course_id)
+    except ValueError as exc:
+        raise HTTPException(status_code=422, detail=str(exc))
+    except Exception as exc:  # noqa: BLE001
+        logger.exception("course mindmap generation failed course=%s", course_id)
+        raise HTTPException(
+            status_code=502,
+            detail=f"No pude generar el mapa del curso: {type(exc).__name__}: {str(exc)[:200]}",
+        )
+
+    fresh = await db.fetchrow(
+        "SELECT mind_map_generated_at FROM courses WHERE id = $1",
+        course_id,
+    )
+    return CourseMindMapResponse(
+        course_id=course_id,
+        markdown=markdown,
+        generated_at=fresh["mind_map_generated_at"].isoformat() if fresh and fresh["mind_map_generated_at"] else None,
+        cached=False,
+    )
+
+
+@router.post("/{course_id}/mindmap/regenerate", response_model=CourseMindMapResponse)
+async def regenerate_course_mindmap(
+    course_id: UUID,
+    user: dict = Depends(get_current_user),
+    db: "asyncpg.Connection" = Depends(get_db),
+):
+    """Fuerza regeneración del mapa del curso aunque haya caché. Útil cuando
+    se agregaron clases nuevas y el mapa quedó desactualizado."""
+    await _ensure_course_owned(db, user["id"], course_id)
+    try:
+        markdown = await mindmap_service.generate_course_mindmap(db, course_id)
+    except ValueError as exc:
+        raise HTTPException(status_code=422, detail=str(exc))
+    except Exception as exc:  # noqa: BLE001
+        logger.exception("course mindmap regeneration failed course=%s", course_id)
+        raise HTTPException(
+            status_code=502,
+            detail=f"No pude regenerar el mapa: {type(exc).__name__}: {str(exc)[:200]}",
+        )
+    fresh = await db.fetchrow(
+        "SELECT mind_map_generated_at FROM courses WHERE id = $1",
+        course_id,
+    )
+    return CourseMindMapResponse(
+        course_id=course_id,
+        markdown=markdown,
+        generated_at=fresh["mind_map_generated_at"].isoformat() if fresh and fresh["mind_map_generated_at"] else None,
+        cached=False,
+    )

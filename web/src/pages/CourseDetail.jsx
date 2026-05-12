@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useState } from 'react';
+import { lazy, Suspense, useCallback, useEffect, useState } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
 import Sidebar from '../components/Sidebar';
 import AbstractArt from '../components/AbstractArt';
@@ -9,6 +9,10 @@ import EvaluationsTab from '../components/EvaluationsTab';
 import CourseModal from '../components/CourseModal';
 import { api } from '../api/client';
 
+// Lazy: markmap (~650KB con D3) solo se carga cuando se abre la tab Mapa.
+const MindMap = lazy(() => import('../components/MindMap'));
+const NodeDeepDiveModal = lazy(() => import('../components/NodeDeepDiveModal'));
+
 export default function CourseDetail() {
   const { id } = useParams();
   const navigate = useNavigate();
@@ -18,6 +22,11 @@ export default function CourseDetail() {
   const [modules, setModules] = useState([]);
   const [materials, setMaterials] = useState([]);
   const [tab, setTab] = useState('clases');
+  // Estado del mapa del curso (lazy: solo se carga al entrar a la tab)
+  const [courseMap, setCourseMap] = useState(null);
+  const [courseMapLoading, setCourseMapLoading] = useState(false);
+  const [courseMapError, setCourseMapError] = useState(null);
+  const [focusedNode, setFocusedNode] = useState(null);
   const [showUploader, setShowUploader] = useState(false);
   const [showDrive, setShowDrive] = useState(false);
   const [showCourseModal, setShowCourseModal] = useState(false);
@@ -146,6 +155,7 @@ export default function CourseDetail() {
           <div className={`tab ${tab === 'clases' ? 'active' : ''}`}      onClick={() => setTab('clases')}>Clases</div>
           <div className={`tab ${tab === 'chat' ? 'active' : ''}`}        onClick={() => setTab('chat')}>Chat</div>
           <div className={`tab ${tab === 'evaluaciones' ? 'active' : ''}`} onClick={() => setTab('evaluaciones')}>Evaluaciones</div>
+          <div className={`tab ${tab === 'mapa' ? 'active' : ''}`}        onClick={() => setTab('mapa')}>Mapa</div>
         </div>
 
         {tab === 'clases' && (
@@ -159,10 +169,93 @@ export default function CourseDetail() {
         )}
         {tab === 'chat' && <ChatInterface courseId={id} />}
         {tab === 'evaluaciones' && <EvaluationsTab courseId={id} />}
+        {tab === 'mapa' && (
+          <CourseMindMapTab
+            courseId={id}
+            courseName={course?.name}
+            map={courseMap}
+            setMap={setCourseMap}
+            loading={courseMapLoading}
+            setLoading={setCourseMapLoading}
+            error={courseMapError}
+            setError={setCourseMapError}
+            onNodeFocus={setFocusedNode}
+          />
+        )}
       </main>
 
       {showCourseModal && (
         <CourseModal onClose={() => setShowCourseModal(false)} onSaved={() => { setShowCourseModal(false); load(); }} />
+      )}
+
+      {focusedNode && (
+        <Suspense fallback={null}>
+          <NodeDeepDiveModal
+            nodeText={focusedNode}
+            courseId={id}
+            materialName={course?.name}
+            onClose={() => setFocusedNode(null)}
+          />
+        </Suspense>
+      )}
+    </div>
+  );
+}
+
+function CourseMindMapTab({ courseId, courseName, map, setMap, loading, setLoading, error, setError, onNodeFocus }) {
+  // Lazy fetch al entrar a la tab.
+  useEffect(() => {
+    if (map || loading) return;
+    setLoading(true);
+    setError(null);
+    api.get(`/courses/${courseId}/mindmap`)
+      .then(setMap)
+      .catch((e) => setError(e?.body?.detail || `Error ${e?.status || ''}`))
+      .finally(() => setLoading(false));
+  }, [courseId, map, loading, setMap, setLoading, setError]);
+
+  const regenerate = async () => {
+    setLoading(true); setError(null);
+    try {
+      const r = await api.post(`/courses/${courseId}/mindmap/regenerate`);
+      setMap(r);
+    } catch (e) {
+      setError(e?.body?.detail || `Error ${e?.status || ''}`);
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  return (
+    <div>
+      {loading && !map && (
+        <div className="card" style={{ padding: 32, textAlign: 'center' }}>
+          <p className="muted">Generando mapa del curso… (~15-25s la primera vez)</p>
+        </div>
+      )}
+      {error && (
+        <div className="card" style={{ padding: 20, borderColor: 'var(--pending, #EF4444)' }}>
+          <p className="error" style={{ margin: 0 }}>{error}</p>
+          <button className="btn btn-ghost" style={{ marginTop: 12 }} onClick={() => { setMap(null); setError(null); }}>
+            Reintentar
+          </button>
+        </div>
+      )}
+      {map && (
+        <>
+          <Suspense fallback={<p className="muted">Cargando renderer…</p>}>
+            <MindMap markdown={map.markdown} onNodeClick={onNodeFocus} filename={courseName ? `${courseName}.md` : 'mapa-curso.md'} />
+          </Suspense>
+          <div className="row" style={{ marginTop: 12, gap: 12, alignItems: 'center', justifyContent: 'space-between' }}>
+            <span className="text-small muted">
+              {map.cached ? '✓ Cacheado' : '✓ Recién generado'}
+              {map.generated_at && ` · ${new Date(map.generated_at).toLocaleString()}`}
+            </span>
+            <button className="btn btn-ghost" onClick={regenerate} disabled={loading}>
+              {loading ? 'Regenerando…' : '↻ Regenerar'}
+            </button>
+          </div>
+        </>
       )}
     </div>
   );
