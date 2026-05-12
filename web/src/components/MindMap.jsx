@@ -110,16 +110,31 @@ export default function MindMap({ markdown, onNodeClick }) {
     }
   }, []);
 
-  // Doble-click en un nodo → callback con su texto. Markmap usa <g class="markmap-node">
-  // con un <foreignObject> que contiene un div con el contenido. Levantamos el
-  // texto desde ahí. Single-click se preserva para el toggle nativo.
-  const handleDoubleClick = (e) => {
+  // Click sobre el texto del nodo → profundizar (abre chat).
+  // Click sobre el círculo (la bolita de toggle) → markmap colapsa la rama.
+  // El SVG generado tiene estructura:
+  //   <g class="markmap-node">
+  //     <circle/>          ← collapse toggle (lo dejamos pasar al handler de markmap)
+  //     <line/>            ← línea al padre (ignorar)
+  //     <foreignObject>    ← contiene <div><p>texto</p></div> (CLICK aquí = profundizar)
+  //   </g>
+  const handleClick = (e) => {
     if (!onNodeClick) return;
+    const tag = e.target.tagName;
+    // Solo intervenimos si el click fue dentro del foreignObject (texto).
+    // Si fue en circle/line del SVG, lo dejamos para el handler nativo de
+    // markmap (collapse/expand).
+    const inForeign = e.target.closest('foreignObject');
+    if (!inForeign) return;
+    if (tag === 'circle' || tag === 'line') return;
     const node = e.target.closest('.markmap-node');
     if (!node) return;
     const div = node.querySelector('foreignObject div');
     const text = (div?.textContent || '').trim();
-    if (text) onNodeClick(text);
+    if (text) {
+      e.stopPropagation();
+      onNodeClick(text);
+    }
   };
 
   return (
@@ -131,10 +146,10 @@ export default function MindMap({ markdown, onNodeClick }) {
         style={styles.svg}
         width="100%"
         height="100%"
-        onDoubleClick={handleDoubleClick}
+        onClick={handleClick}
       />
       <div style={styles.hint}>
-        🔍 <b>doble-click</b> en cualquier nodo para profundizar · scroll = zoom · arrastrar = pan
+        🔍 <b>click en un texto</b> = profundizar · click en la bolita = colapsar
       </div>
     </div>
   );
