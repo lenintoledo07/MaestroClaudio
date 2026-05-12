@@ -88,21 +88,29 @@ async def restore_course(
 # ── Drive folder browse ─────────────────────────────────────────────────────
 
 
+_FOLDER_MIME = "application/vnd.google-apps.folder"
+
+
 @router.get("/{course_id}/drive/files")
 async def list_course_drive_files(
     course_id: UUID,
+    folder_id: str | None = None,
     user: dict = Depends(get_current_user),
     db: "asyncpg.Connection" = Depends(get_db),
 ):
-    """Lista archivos de la carpeta de Drive linkeada al curso.
+    """Lista contenido de la carpeta de Drive del curso (o de una subcarpeta).
 
-    Devuelve solo videos / pdf / pptx (los tipos que el pipeline soporta).
-    Cada item: {id, name, mime_type, type, size, modified_time, already_imported}.
-    `already_imported=True` si ya hay un material con ese drive_file_id en el curso.
+    Si `folder_id` viene en query, lista esa subcarpeta. Si no, la carpeta raíz
+    linkeada al curso. Devuelve archivos compatibles (video/pdf/pptx) y también
+    subcarpetas para permitir navegación.
+
+    Cada item: {id, name, mime_type, type, size, modified_time, is_folder,
+    already_imported}. `is_folder=true` indica que es navegable; `type='folder'`
+    en ese caso. `already_imported` solo aplica a archivos.
     """
     course = await course_service.get_course(db, user["id"], course_id)
-    folder_id = course.drive_folder_id
-    if not folder_id:
+    root_folder_id = course.drive_folder_id
+    if not root_folder_id:
         raise HTTPException(
             status_code=status.HTTP_400_BAD_REQUEST,
             detail="Esta materia no tiene una carpeta de Drive linkeada. "
@@ -110,10 +118,12 @@ async def list_course_drive_files(
         )
 
     # Por si pegaron una URL en vez de un ID puro
-    folder_id = drive_service.extract_file_id_from_url(folder_id) or folder_id
+    root_folder_id = drive_service.extract_file_id_from_url(root_folder_id) or root_folder_id
+    # Carpeta a listar: la raíz del curso o la subcarpeta solicitada
+    target_folder_id = folder_id or root_folder_id
 
     try:
-        items = await drive_service.list_folder_contents(user["id"], folder_id)
+        items = await drive_service.list_folder_contents(user["id"], target_folder_id)
     except Exception as exc:  # noqa: BLE001
         logger.exception("Drive list failed")
         raise HTTPException(
@@ -129,19 +139,37 @@ async def list_course_drive_files(
         )
     }
 
-    result = []
+    folders: list[dict] = []
+    files: list[dict] = []
     for it in items:
-        ftype = drive_service.detect_file_type(it.get("mimeType", ""))
+        mime = it.get("mimeType", "")
+        if mime == _FOLDER_MIME:
+            folders.append({
+                "id": it["id"],
+                "name": it["name"],
+                "mime_type": mime,
+                "type": "folder",
+                "size": None,
+                "modified_time": it.get("modifiedTime"),
+                "is_folder": True,
+                "already_imported": False,
+            })
+            continue
+        ftype = drive_service.detect_file_type(mime)
         if ftype == "unknown":
             continue
-        result.append({
+        files.append({
             "id": it["id"],
             "name": it["name"],
-            "mime_type": it["mimeType"],
+            "mime_type": mime,
             "type": ftype,
             "size": int(it["size"]) if it.get("size") else None,
             "modified_time": it.get("modifiedTime"),
+            "is_folder": False,
             "already_imported": it["id"] in imported_ids,
         })
-    result.sort(key=lambda x: x.get("modified_time") or "", reverse=True)
-    return result
+
+    folders.sort(key=lambda x: x["name"].lower())
+    files.sort(key=lambda x: x.get("modified_time") or "", reverse=True)
+    # Carpetas primero para que sean fáciles de ver
+    return folders + files
