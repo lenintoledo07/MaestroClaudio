@@ -24,12 +24,18 @@ _BASE_SELECT = """
         e.id, e.course_id, e.title, e.type, e.due_date, e.description,
         e.weight_pct, e.status, e.grade, e.calendar_event_id,
         e.reminder_sent_7d, e.reminder_sent_1d, e.created_at,
+        e.auto_detected, e.source_material_id, e.approved,
         c.name AS course_name
     FROM evaluations e
     JOIN courses c ON c.id = e.course_id
                   AND c.user_id = $1
                   AND c.status != 'deleted'
 """
+
+# Filtro común para queries que NO deben mostrar evaluations pendientes de
+# revisión (la lista regular y el scheduler de recordatorios). Solo aparecen
+# las creadas a mano (auto_detected=FALSE) o las auto-detected ya aprobadas.
+_APPROVED_FILTER = "(e.auto_detected = FALSE OR e.approved = TRUE)"
 
 
 async def list_evaluations(
@@ -38,7 +44,7 @@ async def list_evaluations(
     course_id: UUID | None = None,
     status_filter: str | None = None,
 ) -> list[EvaluationResponse]:
-    where = []
+    where = [_APPROVED_FILTER]
     args: list = [user_id]
     if course_id:
         args.append(course_id)
@@ -52,11 +58,7 @@ async def list_evaluations(
         args.append(status_filter)
         where.append(f"e.status = ${len(args)}")
 
-    sql = _BASE_SELECT
-    if where:
-        sql += " WHERE " + " AND ".join(where)
-    sql += " ORDER BY e.due_date ASC"
-
+    sql = _BASE_SELECT + " WHERE " + " AND ".join(where) + " ORDER BY e.due_date ASC"
     rows = await db.fetch(sql, *args)
     return [EvaluationResponse.model_validate(dict(r)) for r in rows]
 
@@ -66,9 +68,10 @@ async def list_upcoming(
 ) -> list[EvaluationUpcomingResponse]:
     today = date.today()
     horizon = today + timedelta(days=days)
-    sql = _BASE_SELECT + """
+    sql = _BASE_SELECT + f"""
         WHERE e.due_date BETWEEN $2 AND $3
           AND e.status = 'pending'
+          AND {_APPROVED_FILTER}
         ORDER BY e.due_date ASC
     """
     rows = await db.fetch(sql, user_id, today, horizon)
@@ -78,6 +81,64 @@ async def list_upcoming(
         d["days_remaining"] = (d["due_date"] - today).days
         out.append(EvaluationUpcomingResponse.model_validate(d))
     return out
+
+
+async def list_pending_review(
+    db: "asyncpg.Connection",
+    user_id: UUID,
+    course_id: UUID | None = None,
+) -> list[EvaluationResponse]:
+    """Evaluations auto-detectadas que esperan aprobación del usuario."""
+    where = ["e.auto_detected = TRUE", "e.approved IS NULL"]
+    args: list = [user_id]
+    if course_id:
+        args.append(course_id)
+        where.append(f"e.course_id = ${len(args)}")
+    sql = _BASE_SELECT + " WHERE " + " AND ".join(where) + " ORDER BY e.due_date ASC"
+    rows = await db.fetch(sql, *args)
+    return [EvaluationResponse.model_validate(dict(r)) for r in rows]
+
+
+async def approve_evaluation(
+    db: "asyncpg.Connection", user_id: UUID, evaluation_id: UUID
+) -> EvaluationResponse:
+    # Validamos ownership joining contra courses como en el resto del servicio.
+    owned = await db.fetchval(
+        """
+        SELECT 1 FROM evaluations e
+        JOIN courses c ON c.id = e.course_id AND c.user_id = $1
+        WHERE e.id = $2
+        """,
+        user_id, evaluation_id,
+    )
+    if not owned:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Evaluación no encontrada")
+    await db.execute(
+        "UPDATE evaluations SET approved = TRUE WHERE id = $1",
+        evaluation_id,
+    )
+    return await get_evaluation(db, user_id, evaluation_id)
+
+
+async def reject_evaluation(
+    db: "asyncpg.Connection", user_id: UUID, evaluation_id: UUID
+) -> dict:
+    """Las auto-detectadas rechazadas se eliminan (no nos sirve guardarlas)."""
+    deleted = await db.fetchval(
+        """
+        DELETE FROM evaluations
+        WHERE id = $2 AND auto_detected = TRUE
+          AND course_id IN (SELECT id FROM courses WHERE user_id = $1)
+        RETURNING id
+        """,
+        user_id, evaluation_id,
+    )
+    if not deleted:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail="Evaluación auto-detectada no encontrada",
+        )
+    return {"deleted": str(deleted)}
 
 
 async def get_evaluation(

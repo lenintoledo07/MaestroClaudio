@@ -63,6 +63,7 @@ async def remind_upcoming_evaluations() -> None:
             JOIN courses c ON c.id = e.course_id AND c.status != 'deleted'
             WHERE e.due_date = $1 AND e.status = 'pending'
               AND e.reminder_sent_7d = FALSE
+              AND (e.auto_detected = FALSE OR e.approved = TRUE)
             """,
             target_7d,
         )
@@ -96,6 +97,7 @@ async def remind_upcoming_evaluations() -> None:
             JOIN courses c ON c.id = e.course_id AND c.status != 'deleted'
             WHERE e.due_date = $1 AND e.status = 'pending'
               AND e.reminder_sent_1d = FALSE
+              AND (e.auto_detected = FALSE OR e.approved = TRUE)
             """,
             target_1d,
         )

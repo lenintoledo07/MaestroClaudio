@@ -15,14 +15,18 @@ export default function Dashboard() {
   const [stats, setStats] = useState({ tips: 0, refs: 0, qa: 0 });
   // Desglose por materia: [{course, tips, refs, qa}]
   const [statsByCourse, setStatsByCourse] = useState([]);
+  // Evaluations auto-detectadas que esperan aprobación
+  const [pendingReview, setPendingReview] = useState([]);
 
   const loadAll = async () => {
     try {
-      const [cs, ms, evs] = await Promise.all([
+      const [cs, ms, evs, prev] = await Promise.all([
         api.get('/courses'),
         api.get('/materials?limit=200'),
         api.get('/evaluations/upcoming').catch(() => []),
+        api.get('/evaluations/pending-review').catch(() => []),
       ]);
+      setPendingReview(prev);
       const activeCourses = cs.filter((c) => c.status !== 'deleted');
       setCourses(activeCourses);
       setMaterials(ms);
@@ -94,6 +98,34 @@ export default function Dashboard() {
             {courses.length} materias activas · {materials.length} materiales
           </span>
         </header>
+
+        {pendingReview.length > 0 && (
+          <div
+            onClick={() => navigate(`/course/${pendingReview[0].course_id}`)}
+            style={{
+              display: 'flex',
+              alignItems: 'center',
+              gap: 14,
+              padding: '12px 16px',
+              marginBottom: 18,
+              background: 'rgba(129,140,248,0.08)',
+              border: '1px solid var(--orange)',
+              borderRadius: 8,
+              cursor: 'pointer',
+            }}
+          >
+            <span style={{ fontSize: 20 }}>🔔</span>
+            <div style={{ flex: 1 }}>
+              <div style={{ fontSize: 14, fontWeight: 500 }}>
+                {pendingReview.length} evaluación{pendingReview.length === 1 ? '' : 'es'} detectada{pendingReview.length === 1 ? '' : 's'} en tus clases
+              </div>
+              <div className="text-small muted">
+                Revisalas para aprobar las fechas y recibir recordatorios automáticos
+              </div>
+            </div>
+            <span className="muted">›</span>
+          </div>
+        )}
 
         <section className="stat-strip">
           <div className="stat-hero">

@@ -387,6 +387,84 @@ async def _persist_signals(
     )
     logger.info("Insertados %d signals para material=%s", len(rows), material_id)
 
+    # Para pendientes con tipo='evaluacion' y fecha válida, además creamos
+    # una evaluation auto-detected pendiente de revisión. El user aprueba o
+    # rechaza desde la UI; el scheduler de recordatorios solo notifica las
+    # aprobadas.
+    if course_id is not None:
+        await _persist_auto_evaluations(
+            conn=conn,
+            pendientes=extraction.get("pendientes", []),
+            material_id=material_id,
+            course_id=course_id,
+        )
+
+
+async def _persist_auto_evaluations(
+    *,
+    conn: asyncpg.Connection,
+    pendientes: list[dict[str, Any]],
+    material_id: UUID,
+    course_id: UUID,
+) -> None:
+    """Crea evaluations auto-detected desde pendientes tipo='evaluacion'.
+
+    Dedup: si ya existe una evaluation para el curso con due_date dentro de
+    ±2 días, se descarta (asumimos que es la misma mencionada varias veces).
+    """
+    from datetime import date as _date
+
+    candidates: list[tuple[_date, str]] = []
+    for p in pendientes:
+        if (p.get("tipo") or "").lower() != "evaluacion":
+            continue
+        raw_date = p.get("fecha_mencionada")
+        if not raw_date:
+            continue
+        try:
+            due = _date.fromisoformat(raw_date)
+        except (TypeError, ValueError):
+            continue
+        if due < _date.today():
+            continue  # fechas pasadas no nos sirven para notificar
+        title = (p.get("descripcion") or "").strip() or "Evaluación detectada"
+        candidates.append((due, title))
+
+    if not candidates:
+        return
+
+    inserted = 0
+    for due, title in candidates:
+        existing = await conn.fetchval(
+            """
+            SELECT id FROM evaluations
+            WHERE course_id = $1
+              AND due_date BETWEEN $2::date - INTERVAL '2 days'
+                               AND $2::date + INTERVAL '2 days'
+            LIMIT 1
+            """,
+            course_id, due,
+        )
+        if existing:
+            continue
+        await conn.execute(
+            """
+            INSERT INTO evaluations (
+                course_id, title, type, due_date,
+                auto_detected, source_material_id, approved
+            )
+            VALUES ($1, $2, 'exam', $3, TRUE, $4, NULL)
+            """,
+            course_id, title[:200], due, material_id,
+        )
+        inserted += 1
+
+    if inserted:
+        logger.info(
+            "Auto-detected %d evaluations para material=%s course=%s",
+            inserted, material_id, course_id,
+        )
+
 
 def _ts_to_seconds(ts: str | None) -> int | None:
     if not ts:

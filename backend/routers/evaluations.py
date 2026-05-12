@@ -44,6 +44,34 @@ async def list_upcoming(
     return await evaluation_service.list_upcoming(db, user["id"], days)
 
 
+@router.get("/pending-review", response_model=list[EvaluationResponse])
+async def list_pending_review(
+    course_id: UUID | None = Query(default=None),
+    user: dict = Depends(get_current_user),
+    db: "asyncpg.Connection" = Depends(get_db),
+):
+    """Evaluations auto-detectadas que esperan aprobación del usuario."""
+    return await evaluation_service.list_pending_review(db, user["id"], course_id)
+
+
+@router.post("/{evaluation_id}/approve", response_model=EvaluationResponse)
+async def approve_evaluation(
+    evaluation_id: UUID,
+    user: dict = Depends(get_current_user),
+    db: "asyncpg.Connection" = Depends(get_db),
+):
+    return await evaluation_service.approve_evaluation(db, user["id"], evaluation_id)
+
+
+@router.post("/{evaluation_id}/reject")
+async def reject_evaluation(
+    evaluation_id: UUID,
+    user: dict = Depends(get_current_user),
+    db: "asyncpg.Connection" = Depends(get_db),
+):
+    return await evaluation_service.reject_evaluation(db, user["id"], evaluation_id)
+
+
 @router.post("", response_model=EvaluationResponse, status_code=201)
 async def create_evaluation(
     payload: EvaluationCreate,

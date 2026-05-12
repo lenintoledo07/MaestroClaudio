@@ -226,6 +226,9 @@ class EvaluationResponse(EvaluationBase):
     reminder_sent_7d: bool = False
     reminder_sent_1d: bool = False
     created_at: datetime
+    auto_detected: bool = False
+    source_material_id: UUID | None = None
+    approved: bool | None = None
 
 
 class EvaluationUpcomingResponse(EvaluationResponse):
