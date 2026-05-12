@@ -54,7 +54,6 @@ export default function MindMap({ markdown, onNodeClick }) {
     const { root } = transformer.transform(markdown);
     if (mmRef.current) {
       mmRef.current.setData(root);
-      mmRef.current.fit();
     } else {
       mmRef.current = Markmap.create(svgRef.current, {
         color: (node) => PALETTE[(node.state?.depth ?? node.depth ?? 0) % PALETTE.length],
@@ -67,6 +66,13 @@ export default function MindMap({ markdown, onNodeClick }) {
         extraCss: EXTRA_CSS,
       }, root);
     }
+    // El SVG puede no tener dimensiones medidas en el primer paint si el
+    // contenedor usa flex/grid. Forzamos fit en el próximo frame, ya con
+    // dimensiones reales.
+    const raf = requestAnimationFrame(() => {
+      try { mmRef.current?.fit(); } catch { /* ignore */ }
+    });
+    return () => cancelAnimationFrame(raf);
   }, [markdown]);
 
   // Cleanup cuando el componente se desmonta.
@@ -91,7 +97,15 @@ export default function MindMap({ markdown, onNodeClick }) {
 
   return (
     <div style={styles.wrap}>
-      <svg ref={svgRef} style={styles.svg} onDoubleClick={handleDoubleClick} />
+      {/* width/height como attributes (no solo style) — markmap usa el bounding
+          rect del SVG para calcular el fit. */}
+      <svg
+        ref={svgRef}
+        style={styles.svg}
+        width="100%"
+        height="100%"
+        onDoubleClick={handleDoubleClick}
+      />
       <div style={styles.hint}>
         scroll = zoom · arrastrar = pan · click = colapsa/expande · <b>doble-click = profundizar</b>
       </div>
