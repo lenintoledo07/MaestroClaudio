@@ -8,6 +8,7 @@ import { api, BASE } from '../api/client';
 // markmap-view trae D3 (~600KB). Lazy import para que el bundle inicial
 // del SPA no lo cargue: solo se descarga cuando el user entra a la tab Mapa.
 const MindMap = lazy(() => import('../components/MindMap'));
+const NodeDeepDiveModal = lazy(() => import('../components/NodeDeepDiveModal'));
 
 const TABS = [
   { key: 'tip',     label: 'Tips',       cls: 'signal-tip' },
@@ -36,6 +37,7 @@ export default function ClassDetail() {
   const [mindmap, setMindmap] = useState(null);  // { markdown, cached, generated_at }
   const [mindmapLoading, setMindmapLoading] = useState(false);
   const [mindmapError, setMindmapError] = useState(null);
+  const [focusedNode, setFocusedNode] = useState(null);  // texto del nodo doble-clickeado
 
   const audioRef = useRef(null);
   const [playing, setPlaying] = useState(false);
@@ -202,7 +204,7 @@ export default function ClassDetail() {
             {mindmap && (
               <>
                 <Suspense fallback={<p className="muted">Cargando renderer…</p>}>
-                  <MindMap markdown={mindmap.markdown} />
+                  <MindMap markdown={mindmap.markdown} onNodeClick={setFocusedNode} />
                 </Suspense>
                 <div className="row" style={{ marginTop: 12, gap: 12, alignItems: 'center', justifyContent: 'space-between' }}>
                   <span className="text-small muted">
@@ -242,6 +244,17 @@ export default function ClassDetail() {
           <ChatInterface courseId={material.course_id} moduleId={material.module_id} materialId={id} />
         </div>
       </main>
+
+      {focusedNode && (
+        <Suspense fallback={null}>
+          <NodeDeepDiveModal
+            nodeText={focusedNode}
+            courseId={material.course_id}
+            materialName={material.filename}
+            onClose={() => setFocusedNode(null)}
+          />
+        </Suspense>
+      )}
     </div>
   );
 }

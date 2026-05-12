@@ -1,9 +1,9 @@
 // Renderiza un mapa conceptual a partir de markdown jerárquico usando
 // markmap-lib (transformer md→tree) + markmap-view (SVG con zoom/collapse).
 //
-// El backend devuelve markdown con `#`/`##`/`###`/`-`. Acá lo convertimos a
-// SVG y montamos. Si el markdown cambia, re-rendereamos el árbol pero
-// preservamos zoom/pan del usuario.
+// Interacciones:
+// - click en un nodo: toggle colapsar/expandir (default de markmap).
+// - DOBLE click en un nodo: invoca onNodeClick(text) para profundizar.
 
 import { useEffect, useRef } from 'react';
 import { Transformer } from 'markmap-lib';
@@ -11,7 +11,41 @@ import { Markmap } from 'markmap-view';
 
 const transformer = new Transformer();
 
-export default function MindMap({ markdown }) {
+// Paleta más saturada que la default — pensada para fondo oscuro. Cada nivel
+// de profundidad usa un color distinto cycle.
+const PALETTE = [
+  '#A5B4FC',  // indigo (raíz)
+  '#67E8F9',  // cyan
+  '#86EFAC',  // lime
+  '#FCD34D',  // amber
+  '#FB923C',  // orange
+  '#F472B6',  // pink
+  '#C4B5FD',  // violet
+];
+
+// CSS inyectado dentro del SVG de markmap para hacer las letras más grandes
+// y legibles contra el fondo oscuro de la app. markmap acepta `extraCss`.
+const EXTRA_CSS = `
+.markmap-foreign {
+  font-family: 'Newsreader', Georgia, serif !important;
+  font-size: 16px !important;
+  font-weight: 500 !important;
+  color: var(--text, #F4F4F5) !important;
+  cursor: pointer;
+}
+.markmap-foreign a {
+  color: var(--orange, #818CF8) !important;
+}
+.markmap-foreign strong {
+  font-weight: 700 !important;
+}
+.markmap-link {
+  stroke-width: 2px !important;
+  opacity: 0.85;
+}
+`;
+
+export default function MindMap({ markdown, onNodeClick }) {
   const svgRef = useRef(null);
   const mmRef = useRef(null);
 
@@ -19,20 +53,18 @@ export default function MindMap({ markdown }) {
     if (!markdown || !svgRef.current) return;
     const { root } = transformer.transform(markdown);
     if (mmRef.current) {
-      // Reuso del Markmap existente: solo actualiza datos.
       mmRef.current.setData(root);
       mmRef.current.fit();
     } else {
       mmRef.current = Markmap.create(svgRef.current, {
-        // Tokens alineados con el design system V4 "Studious Calm".
-        color: (node) => {
-          const palette = ['#818CF8', '#A78BFA', '#67E8F9', '#86EFAC', '#FCD34D', '#FB923C'];
-          return palette[(node.state?.depth ?? 0) % palette.length];
-        },
+        color: (node) => PALETTE[(node.state?.depth ?? node.depth ?? 0) % PALETTE.length],
         duration: 350,
-        spacingHorizontal: 80,
-        spacingVertical: 18,
-        paddingX: 10,
+        spacingHorizontal: 90,
+        spacingVertical: 24,
+        paddingX: 14,
+        nodeMinHeight: 28,
+        lineWidth: 2,
+        extraCss: EXTRA_CSS,
       }, root);
     }
   }, [markdown]);
@@ -45,10 +77,24 @@ export default function MindMap({ markdown }) {
     }
   }, []);
 
+  // Doble-click en un nodo → callback con su texto. Markmap usa <g class="markmap-node">
+  // con un <foreignObject> que contiene un div con el contenido. Levantamos el
+  // texto desde ahí. Single-click se preserva para el toggle nativo.
+  const handleDoubleClick = (e) => {
+    if (!onNodeClick) return;
+    const node = e.target.closest('.markmap-node');
+    if (!node) return;
+    const div = node.querySelector('foreignObject div');
+    const text = (div?.textContent || '').trim();
+    if (text) onNodeClick(text);
+  };
+
   return (
     <div style={styles.wrap}>
-      <svg ref={svgRef} style={styles.svg} />
-      <div style={styles.hint}>scroll = zoom · arrastrar = pan · click en nodo = colapsa/expande</div>
+      <svg ref={svgRef} style={styles.svg} onDoubleClick={handleDoubleClick} />
+      <div style={styles.hint}>
+        scroll = zoom · arrastrar = pan · click = colapsa/expande · <b>doble-click = profundizar</b>
+      </div>
     </div>
   );
 }
