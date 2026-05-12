@@ -53,13 +53,16 @@ def _parse_event_datetime(raw: dict) -> tuple[date | None, time | None, time | N
 
 
 def _match_course(title: str, courses: list[asyncpg.Record]) -> asyncpg.Record | None:
-    """Match case-insensitive por nombre y código del curso."""
+    """Match case-insensitive por nombre, código o aliases del curso."""
     lo = (title or "").lower()
     for c in courses:
         if c["name"] and c["name"].lower() in lo:
             return c
         if c["code"] and c["code"].lower() in lo:
             return c
+        for alias in (c["aliases"] or []):
+            if alias and alias.lower() in lo:
+                return c
     return None
 
 
@@ -123,7 +126,7 @@ async def sync_user_calendar(user_id: UUID) -> dict[str, int]:
     pool_conn = await asyncpg.connect(settings.DATABASE_URL, command_timeout=10)
     try:
         courses = await pool_conn.fetch(
-            "SELECT id, name, code FROM courses WHERE user_id = $1 AND status = 'active'",
+            "SELECT id, name, code, aliases FROM courses WHERE user_id = $1 AND status = 'active'",
             user_id,
         )
         if not courses:

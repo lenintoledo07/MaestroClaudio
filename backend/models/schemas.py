@@ -57,6 +57,7 @@ class CourseBase(BaseModel):
     professor_whatsapp_name: str | None = None
     drive_folder_id: str | None = None
     color: str = Field(default="#FF4D1C", pattern=HEX_COLOR)
+    aliases: list[str] = Field(default_factory=list)
 
 
 class CourseCreate(CourseBase):
@@ -71,6 +72,7 @@ class CourseUpdate(BaseModel):
     drive_folder_id: str | None = None
     color: str | None = Field(default=None, pattern=HEX_COLOR)
     status: Literal["active", "paused", "completed"] | None = None
+    aliases: list[str] | None = None
 
 
 class CourseResponse(CourseBase):

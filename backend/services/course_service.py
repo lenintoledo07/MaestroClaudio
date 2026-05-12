@@ -18,6 +18,7 @@ _BASE_SELECT = """
         c.id, c.user_id, c.name, c.code, c.professor,
         c.professor_whatsapp_name, c.drive_folder_id, c.color,
         c.status, c.start_date, c.end_date, c.created_at,
+        c.aliases,
         COALESCE(m.cnt, 0) AS modules_count,
         COALESCE(mat.cnt, 0) AS materials_count
     FROM courses c
@@ -71,9 +72,9 @@ async def create_course(
         """
         INSERT INTO courses (
             user_id, name, code, professor, professor_whatsapp_name,
-            drive_folder_id, color
+            drive_folder_id, color, aliases
         )
-        VALUES ($1, $2, $3, $4, $5, $6, $7)
+        VALUES ($1, $2, $3, $4, $5, $6, $7, $8)
         RETURNING id
         """,
         user_id,
@@ -83,6 +84,7 @@ async def create_course(
         payload.professor_whatsapp_name,
         payload.drive_folder_id,
         payload.color,
+        payload.aliases,
     )
     # Módulo default — sin esto el botón "Importar de Drive" queda disabled
     # (firstModuleId en CourseDetail), bloqueando el flujo de ingesta.

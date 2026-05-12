@@ -21,6 +21,7 @@ export default function CourseModal({ course, onClose, onSaved }) {
     color: course?.color || '#818CF8',  // hex, NO el nombre del color (el backend valida ^#[0-9A-Fa-f]{6}$)
     drive_folder_id: course?.drive_folder_id || '',
     status: course?.status || 'active',
+    aliases_text: (course?.aliases || []).join('\n'),
   });
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState(null);
@@ -64,8 +65,16 @@ export default function CourseModal({ course, onClose, onSaved }) {
     if (!form.name.trim()) { setError('El nombre es obligatorio'); return; }
     setBusy(true); setError(null);
     // Sanitizar: no mandar el sentinel "__manual__" al backend.
-    const payload = { ...form };
+    const { aliases_text, ...rest } = form;
+    const payload = { ...rest };
     if (payload.drive_folder_id === '__manual__') payload.drive_folder_id = '';
+    // Aliases viene como textarea (uno por línea). Limpiar vacíos y duplicados.
+    payload.aliases = [...new Set(
+      (aliases_text || '')
+        .split('\n')
+        .map((s) => s.trim())
+        .filter(Boolean)
+    )];
     try {
       if (editing) {
         await api.patch(`/courses/${course.id}`, payload);
@@ -98,6 +107,34 @@ export default function CourseModal({ course, onClose, onSaved }) {
         <div className="field">
           <label>Profesor/a</label>
           <input value={form.professor} onChange={(e) => update('professor', e.target.value)} placeholder="Nombre del docente" />
+        </div>
+
+        <div className="field">
+          <label>
+            Aliases <span className="muted" style={{ fontWeight: 400, fontSize: 11 }}>(opcional · uno por línea)</span>
+          </label>
+          <textarea
+            value={form.aliases_text}
+            onChange={(e) => update('aliases_text', e.target.value)}
+            placeholder={'Hacking ético\nHacking\nCiberseguridad ofensiva'}
+            rows={3}
+            style={{
+              width: '100%',
+              background: 'var(--bg3)',
+              border: '1px solid var(--border2)',
+              color: 'var(--text)',
+              borderRadius: 8,
+              padding: '8px 12px',
+              fontFamily: 'inherit',
+              fontSize: 13,
+              resize: 'vertical',
+            }}
+          />
+          <div className="text-small muted" style={{ marginTop: 4 }}>
+            Para que el calendario asocie tus eventos VIU con esta materia, agregá
+            términos alternativos que aparezcan en el título del evento. Ej. si
+            el evento dice "Hacking ético — Clase 5", agregá "Hacking ético".
+          </div>
         </div>
 
         <div className="field">
