@@ -27,7 +27,7 @@ export default function Login() {
     <div style={styles.page}>
       <div className="login-layout" style={styles.layout}>
         <div className="login-hero" style={styles.heroSide}>
-          <MaestroAvatar size={260} variant="hero" />
+          <MaestroAvatar size={280} />
         </div>
         <div style={styles.card}>
           <div className="logo" style={{ marginBottom: 24, display: 'flex', alignItems: 'center', gap: 12 }}>
