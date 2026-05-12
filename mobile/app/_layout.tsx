@@ -9,6 +9,7 @@ import { StatusBar } from 'expo-status-bar';
 import { AuthProvider, useAuth } from '../lib/auth';
 import { useAppFonts } from '../constants/Typography';
 import { Colors } from '../constants/Colors';
+import ChatLauncher from '../components/ChatLauncher';
 import {
   registerForPushNotifications,
   setupNotificationListeners,
@@ -91,6 +92,7 @@ export default function RootLayout() {
           <Stack.Screen name="course/[id]" options={{ title: 'Materia' }} />
           <Stack.Screen name="signals/[kind]" options={{ title: 'Signals' }} />
         </Stack>
+        <ChatLauncher />
       </AuthGate>
     </AuthProvider>
   );

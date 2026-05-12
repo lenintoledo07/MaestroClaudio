@@ -9,6 +9,7 @@ import CalendarPage from './pages/CalendarPage';
 import Settings from './pages/Settings';
 import Onboarding from './pages/Onboarding';
 import SignalsPage from './pages/SignalsPage';
+import ChatLauncher from './components/ChatLauncher';
 
 function ProtectedRoute({ children, requireOnboarding = true }) {
   const { user, loading } = useAuth();
@@ -44,6 +45,7 @@ export default function App() {
         <Route path="/settings" element={<ProtectedRoute><Settings /></ProtectedRoute>} />
         <Route path="*" element={<Navigate to="/dashboard" replace />} />
       </Routes>
+      <ChatLauncher />
     </BrowserRouter>
   );
 }
