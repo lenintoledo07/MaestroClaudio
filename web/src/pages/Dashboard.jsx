@@ -190,23 +190,12 @@ function StatMini({ label, value, to, loadingPercent, processing }) {
 function StatMiniProgress({ percent, processing }) {
   return (
     <div style={{ marginTop: 8, fontSize: 10, color: 'var(--muted)' }}>
-      <div
-        style={{
-          height: 3,
-          borderRadius: 2,
-          background: 'var(--bg3)',
-          overflow: 'hidden',
-          marginBottom: 4,
-        }}
-      >
+      <div className="stat-progress-track">
         <div
-          style={{
-            height: '100%',
-            width: `${percent}%`,
-            background: 'var(--orange)',
-            transition: 'width 0.4s ease',
-          }}
+          className="stat-progress-fill"
+          style={{ width: `${percent}%` }}
         />
+        <div className="stat-progress-shimmer" />
       </div>
       <div
         className="text-mono-sm"
