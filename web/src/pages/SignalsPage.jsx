@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useState } from 'react';
-import { useParams } from 'react-router-dom';
+import { useParams, useSearchParams } from 'react-router-dom';
 import Sidebar from '../components/Sidebar';
 import SignalDetail from '../components/SignalDetail';
 import { api } from '../api/client';
@@ -19,10 +19,19 @@ const IMPORTANCE_COLOR = {
 export default function SignalsPage() {
   const { kind } = useParams();
   const config = KIND_CONFIG[kind];
+  const [searchParams, setSearchParams] = useSearchParams();
+  // Filtro inicial = ?course=<id> en la URL, sino 'all'. Si el user cambia
+  // el filtro lo refleja en la URL para que el link sea compartible.
+  const filter = searchParams.get('course') || 'all';
+  const setFilter = (next) => {
+    const params = new URLSearchParams(searchParams);
+    if (next === 'all') params.delete('course');
+    else params.set('course', next);
+    setSearchParams(params, { replace: true });
+  };
 
   const [signals, setSignals] = useState(null);
   const [courses, setCourses] = useState([]);
-  const [filter, setFilter] = useState('all');
   const [error, setError] = useState(null);
   const [selected, setSelected] = useState(null);
 

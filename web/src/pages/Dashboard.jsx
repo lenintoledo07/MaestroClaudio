@@ -13,6 +13,8 @@ export default function Dashboard() {
   const [weekly, setWeekly] = useState([]);
   const [showCourseModal, setShowCourseModal] = useState(false);
   const [stats, setStats] = useState({ tips: 0, refs: 0, qa: 0 });
+  // Desglose por materia: [{course, tips, refs, qa}]
+  const [statsByCourse, setStatsByCourse] = useState([]);
 
   const loadAll = async () => {
     try {
@@ -21,7 +23,8 @@ export default function Dashboard() {
         api.get('/materials?limit=20'),
         api.get('/evaluations/upcoming').catch(() => []),
       ]);
-      setCourses(cs.filter((c) => c.status !== 'deleted'));
+      const activeCourses = cs.filter((c) => c.status !== 'deleted');
+      setCourses(activeCourses);
       setMaterials(ms);
       setEvals(evs);
 
@@ -31,20 +34,28 @@ export default function Dashboard() {
         setWeekly(w);
       } catch { /* aún no implementado */ }
 
-      // Stats agregados — un fetch por curso. Acepto los 4 cursos.
-      const tipCounts = await Promise.all(
-        cs.map((c) => api.get(`/courses/${c.id}/exam-tips`).catch(() => []))
+      // Stats por curso — un fetch por curso × 3 endpoints. Lo guardamos
+      // desglosado para mostrar la fila por materia, y también sumamos al total.
+      const tipsBy = await Promise.all(
+        activeCourses.map((c) => api.get(`/courses/${c.id}/exam-tips`).catch(() => []))
       );
-      const refCounts = await Promise.all(
-        cs.map((c) => api.get(`/courses/${c.id}/references`).catch(() => []))
+      const refsBy = await Promise.all(
+        activeCourses.map((c) => api.get(`/courses/${c.id}/references`).catch(() => []))
       );
-      const qaCounts = await Promise.all(
-        cs.map((c) => api.get(`/courses/${c.id}/qa`).catch(() => []))
+      const qaBy = await Promise.all(
+        activeCourses.map((c) => api.get(`/courses/${c.id}/qa`).catch(() => []))
       );
+      const breakdown = activeCourses.map((c, i) => ({
+        course: c,
+        tips: tipsBy[i].length,
+        refs: refsBy[i].length,
+        qa: qaBy[i].length,
+      }));
+      setStatsByCourse(breakdown);
       setStats({
-        tips: tipCounts.flat().length,
-        refs: refCounts.flat().length,
-        qa: qaCounts.flat().length,
+        tips: tipsBy.flat().length,
+        refs: refsBy.flat().length,
+        qa: qaBy.flat().length,
       });
     } catch (e) {
       console.error('dashboard load', e);
@@ -90,7 +101,19 @@ export default function Dashboard() {
           <StatMini label="Q&A"         value={stats.qa}   to="/signals/qa" />
         </section>
 
-        <div style={{ display: 'grid', gridTemplateColumns: '1fr 320px', gap: 28 }}>
+        {statsByCourse.length > 0 && (
+          <section style={{ marginTop: 28 }}>
+            <SectionHeader title="Por materia" />
+            <div className="card" style={{ padding: 0, overflow: 'hidden' }}>
+              <CourseStatsHeader />
+              {statsByCourse.map((row) => (
+                <CourseStatsRow key={row.course.id} row={row} onNavigate={navigate} />
+              ))}
+            </div>
+          </section>
+        )}
+
+        <div style={{ display: 'grid', gridTemplateColumns: '1fr 320px', gap: 28, marginTop: 28 }}>
           <div>
             <SectionHeader title="Esta Semana" />
             {weekly.length === 0 ? (
@@ -222,6 +245,76 @@ function NoEvalCard() {
     <div className="card" style={{ color: 'var(--muted)', fontSize: 13 }}>
       No hay evaluaciones próximas. Agregá una desde el detalle de la materia.
     </div>
+  );
+}
+
+function CourseStatsHeader() {
+  return (
+    <div
+      className="row"
+      style={{
+        padding: '10px 16px',
+        background: 'var(--bg3)',
+        borderBottom: '1px solid var(--border)',
+        fontSize: 11,
+        letterSpacing: 1.5,
+        textTransform: 'uppercase',
+        color: 'var(--muted)',
+        fontFamily: 'JetBrains Mono, monospace',
+      }}
+    >
+      <span style={{ flex: 1 }}>Materia</span>
+      <span style={{ width: 90, textAlign: 'right' }}>Exam tips</span>
+      <span style={{ width: 90, textAlign: 'right' }}>Refs</span>
+      <span style={{ width: 70, textAlign: 'right' }}>Q&amp;A</span>
+    </div>
+  );
+}
+
+function CourseStatsRow({ row, onNavigate }) {
+  const { course, tips, refs, qa } = row;
+  const go = (kind) => onNavigate(`/signals/${kind}?course=${course.id}`);
+  return (
+    <div
+      className="row"
+      style={{
+        padding: '12px 16px',
+        borderBottom: '1px solid var(--border)',
+        fontSize: 13,
+      }}
+    >
+      <span className="row" style={{ flex: 1, gap: 10, minWidth: 0 }}>
+        <span style={{ width: 8, height: 8, borderRadius: '50%', background: course.color || 'var(--muted)' }} />
+        <span style={{ overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{course.name}</span>
+        {course.code && <span className="text-mono-sm muted">{course.code}</span>}
+      </span>
+      <CountCell value={tips} disabled={tips === 0} onClick={() => go('exam-tips')} />
+      <CountCell value={refs} disabled={refs === 0} onClick={() => go('references')} />
+      <CountCell value={qa}   disabled={qa === 0}   onClick={() => go('qa')} width={70} />
+    </div>
+  );
+}
+
+function CountCell({ value, disabled, onClick, width = 90 }) {
+  return (
+    <button
+      onClick={disabled ? undefined : onClick}
+      disabled={disabled}
+      style={{
+        width,
+        textAlign: 'right',
+        background: 'none',
+        border: 0,
+        padding: 0,
+        color: disabled ? 'var(--muted2)' : 'var(--text)',
+        cursor: disabled ? 'default' : 'pointer',
+        fontFamily: 'JetBrains Mono, monospace',
+        fontSize: 14,
+        fontWeight: 500,
+      }}
+    >
+      {String(value).padStart(2, '0')}
+    </button>
   );
 }
 
