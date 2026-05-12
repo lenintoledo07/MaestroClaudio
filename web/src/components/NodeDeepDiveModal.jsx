@@ -84,6 +84,9 @@ const styles = {
     display: 'flex', alignItems: 'flex-start', gap: 12,
     padding: 24,
     borderBottom: '1px solid var(--border)',
+    flexShrink: 0,
+    maxHeight: '40vh',
+    overflowY: 'auto',
   },
   closeBtn: {
     background: 'transparent', border: 'none', color: 'var(--muted)',

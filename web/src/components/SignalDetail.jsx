@@ -54,8 +54,14 @@ export default function SignalDetail({ signal, onClose }) {
           overflow: 'hidden',
         }}
       >
-        {/* Header con el signal */}
-        <div style={{ padding: 24, borderBottom: '1px solid var(--border)' }}>
+        {/* Header con el signal — scrollea si el contenido es muy largo */}
+        <div style={{
+          padding: 24,
+          borderBottom: '1px solid var(--border)',
+          flexShrink: 0,
+          maxHeight: '40vh',
+          overflowY: 'auto',
+        }}>
           <div className="row" style={{ justifyContent: 'space-between', alignItems: 'flex-start', gap: 12 }}>
             <div style={{ flex: 1 }}>
               <div className="row" style={{ gap: 10, marginBottom: 10, alignItems: 'center' }}>
