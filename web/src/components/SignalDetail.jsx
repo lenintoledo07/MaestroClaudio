@@ -19,6 +19,14 @@ export default function SignalDetail({ signal, onClose }) {
     return () => window.removeEventListener('keydown', onKey);
   }, [onClose]);
 
+  // Bloquear scroll del body mientras el modal está abierto, sino el wheel
+  // sobre el modal scrollea la página de atrás.
+  useEffect(() => {
+    const prev = document.body.style.overflow;
+    document.body.style.overflow = 'hidden';
+    return () => { document.body.style.overflow = prev; };
+  }, []);
+
   const navigate = useNavigate();
 
   if (!signal) return null;

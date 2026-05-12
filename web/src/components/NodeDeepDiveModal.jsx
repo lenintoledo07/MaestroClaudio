@@ -15,6 +15,14 @@ export default function NodeDeepDiveModal({ nodeText, courseId, materialName, on
     return () => window.removeEventListener('keydown', onKey);
   }, [onClose]);
 
+  // Bloquear scroll del body mientras está el modal abierto. Sin esto, hacer
+  // wheel sobre el modal scrollea el contenido de atrás (mind map / dashboard).
+  useEffect(() => {
+    const prev = document.body.style.overflow;
+    document.body.style.overflow = 'hidden';
+    return () => { document.body.style.overflow = prev; };
+  }, []);
+
   if (!nodeText) return null;
 
   const initialQuery = (
