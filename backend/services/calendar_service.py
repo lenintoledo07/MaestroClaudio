@@ -242,8 +242,14 @@ async def get_events_in_range(
     user_id: UUID, conn: asyncpg.Connection,
     *, start: date, end: date,
 ) -> list[dict[str, Any]]:
-    """Eventos sincronizados en un rango arbitrario, agrupados por curso."""
-    rows = await conn.fetch(
+    """Eventos sincronizados + evaluations aprobadas en un rango arbitrario,
+    agrupados por curso.
+
+    Cada evento incluye `kind`: 'class' (sincronizado de Google Calendar) o
+    'evaluation' (parcial/entrega que requiere recordatorio). Las evaluations
+    auto-detected pendientes de revisión NO se incluyen (esperan aprobación).
+    """
+    class_rows = await conn.fetch(
         """
         SELECT ce.id, ce.google_event_id, ce.title, ce.event_date,
                ce.start_time, ce.material_status, ce.module_id,
@@ -264,8 +270,26 @@ async def get_events_in_range(
         user_id, start, end,
     )
 
+    eval_rows = await conn.fetch(
+        """
+        SELECT e.id, e.title, e.due_date, e.type, e.weight_pct,
+               e.auto_detected, e.source_material_id,
+               c.id AS course_id, c.name AS course_name, c.code AS course_code,
+               c.color AS course_color
+        FROM evaluations e
+        JOIN courses c ON c.id = e.course_id
+        WHERE c.user_id = $1
+          AND c.status = 'active'
+          AND e.due_date BETWEEN $2 AND $3
+          AND (e.auto_detected = FALSE OR e.approved = TRUE)
+        ORDER BY e.due_date
+        """,
+        user_id, start, end,
+    )
+
     by_course: dict[UUID, dict[str, Any]] = {}
-    for r in rows:
+
+    def ensure_group(r: asyncpg.Record) -> dict[str, Any]:
         cid = r["course_id"]
         if cid not in by_course:
             by_course[cid] = {
@@ -275,7 +299,11 @@ async def get_events_in_range(
                 "course_color": r["course_color"],
                 "events": [],
             }
-        by_course[cid]["events"].append({
+        return by_course[cid]
+
+    for r in class_rows:
+        ensure_group(r)["events"].append({
+            "kind": "class",
             "event_id": r["id"],
             "event_date": r["event_date"],
             "start_time": str(r["start_time"]) if r["start_time"] else None,
@@ -284,6 +312,24 @@ async def get_events_in_range(
             "material_id": r["material_id"],
             "day_label": r["event_date"].strftime("%a %d") if r["event_date"] else None,
         })
+
+    for r in eval_rows:
+        ensure_group(r)["events"].append({
+            "kind": "evaluation",
+            "event_id": r["id"],
+            "evaluation_id": r["id"],
+            "event_date": r["due_date"],
+            "start_time": None,
+            "title": r["title"],
+            "type": r["type"],
+            "weight_pct": float(r["weight_pct"]) if r["weight_pct"] is not None else None,
+            "auto_detected": r["auto_detected"],
+            "source_material_id": r["source_material_id"],
+            "material_status": None,
+            "material_id": r["source_material_id"],  # alias para reuso del UI
+            "day_label": r["due_date"].strftime("%a %d") if r["due_date"] else None,
+        })
+
     return list(by_course.values())
 
 
