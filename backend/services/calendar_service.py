@@ -235,6 +235,55 @@ async def sync_user_calendar(user_id: UUID) -> dict[str, int]:
         await pool_conn.close()
 
 
+async def get_events_in_range(
+    user_id: UUID, conn: asyncpg.Connection,
+    *, start: date, end: date,
+) -> list[dict[str, Any]]:
+    """Eventos sincronizados en un rango arbitrario, agrupados por curso."""
+    rows = await conn.fetch(
+        """
+        SELECT ce.id, ce.google_event_id, ce.title, ce.event_date,
+               ce.start_time, ce.material_status, ce.module_id,
+               c.id AS course_id, c.name AS course_name, c.code AS course_code,
+               c.color AS course_color,
+               (SELECT m.id FROM materials m
+                  WHERE m.course_id = c.id
+                    AND (ce.module_id IS NULL OR m.module_id = ce.module_id)
+                    AND m.status = 'ready'
+                  ORDER BY m.created_at DESC LIMIT 1) AS material_id
+        FROM calendar_events ce
+        JOIN courses c ON c.id = ce.course_id
+        WHERE c.user_id = $1
+          AND c.status = 'active'
+          AND ce.event_date BETWEEN $2 AND $3
+        ORDER BY ce.event_date, ce.start_time
+        """,
+        user_id, start, end,
+    )
+
+    by_course: dict[UUID, dict[str, Any]] = {}
+    for r in rows:
+        cid = r["course_id"]
+        if cid not in by_course:
+            by_course[cid] = {
+                "course_id": cid,
+                "course_name": r["course_name"],
+                "course_code": r["course_code"],
+                "course_color": r["course_color"],
+                "events": [],
+            }
+        by_course[cid]["events"].append({
+            "event_id": r["id"],
+            "event_date": r["event_date"],
+            "start_time": str(r["start_time"]) if r["start_time"] else None,
+            "title": r["title"],
+            "material_status": r["material_status"],
+            "material_id": r["material_id"],
+            "day_label": r["event_date"].strftime("%a %d") if r["event_date"] else None,
+        })
+    return list(by_course.values())
+
+
 async def get_weekly_status(user_id: UUID, conn: asyncpg.Connection) -> list[dict[str, Any]]:
     """Eventos de la semana actual agrupados por curso."""
     today = date.today()
