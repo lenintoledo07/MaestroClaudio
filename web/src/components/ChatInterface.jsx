@@ -16,8 +16,15 @@ export default function ChatInterface({ courseId, moduleId, materialId, initialQ
   const [busy, setBusy] = useState(false);
   const scrollerRef = useRef(null);
 
+  // Auto-scroll al fondo SOLO si el user ya estaba cerca del fondo. Sin esto,
+  // cada token del stream interrumpe al user que está leyendo arriba.
   useEffect(() => {
-    scrollerRef.current?.scrollTo(0, scrollerRef.current.scrollHeight);
+    const el = scrollerRef.current;
+    if (!el) return;
+    const distFromBottom = el.scrollHeight - el.scrollTop - el.clientHeight;
+    if (distFromBottom < 100) {
+      el.scrollTo(0, el.scrollHeight);
+    }
   }, [messages]);
 
   // Reset al cambiar de scope
