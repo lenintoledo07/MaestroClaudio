@@ -52,6 +52,16 @@ Reglas estrictas:
 """
 
 USER_PROMPT_EXTRACTION_TEMPLATE = """\
+Hoy es {today}.
+
+IMPORTANTE — interpretación de fechas:
+- Cuando el profesor menciona una fecha relativa ("el lunes", "mañana", "la
+  próxima semana") o sin año explícito ("el 1 de junio", "el 15"), interpretá
+  esa fecha asumiendo el AÑO ACTUAL. Si la fecha cae en el pasado relativo a
+  hoy, usá el año siguiente (porque seguro está hablando del próximo).
+- Solo usá un año distinto al actual si el profesor lo dice explícitamente.
+- Formato de salida: "YYYY-MM-DD".
+
 Analiza la siguiente transcripción y extrae toda la información pedagógica.
 
 Devuelve EXACTAMENTE este JSON (mismas claves, mismo orden):
@@ -156,8 +166,13 @@ async def extract_signals(
 
 
 async def _call_extraction(transcript: str, *, model: str) -> dict[str, Any]:
+    from datetime import date as _date_today
+
     client = _get_client()
-    user_prompt = USER_PROMPT_EXTRACTION_TEMPLATE.format(transcript=transcript)
+    user_prompt = USER_PROMPT_EXTRACTION_TEMPLATE.format(
+        transcript=transcript,
+        today=_date_today.today().isoformat(),
+    )
     try:
         msg = await client.messages.create(
             model=model,
