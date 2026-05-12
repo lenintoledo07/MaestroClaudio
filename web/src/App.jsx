@@ -10,6 +10,7 @@ import Settings from './pages/Settings';
 import Onboarding from './pages/Onboarding';
 import SignalsPage from './pages/SignalsPage';
 import ChatLauncher from './components/ChatLauncher';
+import ThemeToggle from './components/ThemeToggle';
 
 function ProtectedRoute({ children, requireOnboarding = true }) {
   const { user, loading } = useAuth();
@@ -30,6 +31,13 @@ function ProtectedRoute({ children, requireOnboarding = true }) {
   return children;
 }
 
+function GlobalThemeToggle() {
+  // Oculto en login/onboarding para no distraer; en el resto siempre visible.
+  const location = useLocation();
+  if (['/login', '/onboarding'].includes(location.pathname)) return null;
+  return <ThemeToggle />;
+}
+
 export default function App() {
   return (
     <BrowserRouter>
@@ -46,6 +54,7 @@ export default function App() {
         <Route path="*" element={<Navigate to="/dashboard" replace />} />
       </Routes>
       <ChatLauncher />
+      <GlobalThemeToggle />
     </BrowserRouter>
   );
 }

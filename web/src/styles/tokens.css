@@ -1,39 +1,12 @@
-/* Maestro Claudio — Design System V4 "Studious Calm"
-   Hybrid: Linear shell (low saturation) + Newsreader serif para contenido +
-   indigo apagado como acento. Pensado para sesiones largas de estudio. */
+/* Maestro Claudio — Design System V5 "Multi-theme"
+   4 paletas elegibles vía data-theme en <html>. El default sigue siendo el
+   indigo dark ("dark-indigo") para preservar la look-and-feel actual. Otras
+   opciones: light, sepia, dark-warm. */
+
+/* ── Defaults compartidos (NO color) ──────────────────────────────────── */
 
 :root {
-  /* Background scale (warm dark) */
-  --bg: #0E0E10;
-  --bg2: #17171A;
-  --bg3: #1E1E22;
-  --bg4: #2A2A2E;
-
-  /* Acento: indigo apagado. La variable se llama --orange por compatibilidad
-     con el código existente — el VALOR es indigo. No es naranja real. */
-  --orange: #818CF8;
-  --orange2: #A5B4FC;
-
-  /* Tipos de señales pedagógicas (status colors usados sólo donde importa) */
-  --tip: #F59E0B;
-  --ref: #818CF8;
-  --qa: #22C55E;
-  --pending: #EF4444;
-
-  /* Colores por materia (4 fijas del Master) — versiones muteadas */
-  --c-hacking: #818CF8;
-  --c-normativa: #A78BFA;
-  --c-monitoring: #67E8F9;
-  --c-gobierno: #86EFAC;
-
-  /* Texto + bordes */
-  --text: #F4F4F5;
-  --muted: #A1A1AA;
-  --muted2: #52525B;
-  --border: #27272A;
-  --border2: #323237;
-
-  /* Espaciado (4px base) */
+  /* Espaciado (4px base) — independiente del tema */
   --space-1: 4px;
   --space-2: 8px;
   --space-3: 12px;
@@ -49,7 +22,143 @@
   --radius-md: 12px;
   --radius-lg: 16px;
   --radius-full: 999px;
+
+  /* Tipos de señales pedagógicas (los mantenemos consistentes entre temas) */
+  --tip: #F59E0B;
+  --ref: #818CF8;
+  --qa: #22C55E;
+  --pending: #EF4444;
 }
+
+/* ── DARK INDIGO (default) — "Studious Calm" V4 ─────────────────────────── */
+
+:root,
+:root[data-theme="dark-indigo"] {
+  color-scheme: dark;
+
+  --bg: #0E0E10;
+  --bg2: #17171A;
+  --bg3: #1E1E22;
+  --bg4: #2A2A2E;
+
+  /* Acento: indigo apagado. La variable se llama --orange por compat
+     con código existente — el VALOR es indigo. */
+  --orange: #818CF8;
+  --orange2: #A5B4FC;
+
+  /* Colores por materia (4 fijas) — versiones muteadas */
+  --c-hacking: #818CF8;
+  --c-normativa: #A78BFA;
+  --c-monitoring: #67E8F9;
+  --c-gobierno: #86EFAC;
+
+  --text: #F4F4F5;
+  --muted: #A1A1AA;
+  --muted2: #52525B;
+  --border: #27272A;
+  --border2: #323237;
+
+  --ambient-glow: radial-gradient(
+    1200px circle at 80% -10%,
+    rgba(129, 140, 248, 0.06) 0%,
+    transparent 50%
+  );
+}
+
+/* ── LIGHT (Linear/Notion light) ─────────────────────────────────────────── */
+
+:root[data-theme="light"] {
+  color-scheme: light;
+
+  --bg: #FAFAFA;
+  --bg2: #F4F4F5;
+  --bg3: #E9E9EC;
+  --bg4: #DCDCE0;
+
+  --orange: #6366F1;
+  --orange2: #818CF8;
+
+  --c-hacking: #6366F1;
+  --c-normativa: #8B5CF6;
+  --c-monitoring: #0891B2;
+  --c-gobierno: #16A34A;
+
+  --text: #18181B;
+  --muted: #52525B;
+  --muted2: #A1A1AA;
+  --border: #E4E4E7;
+  --border2: #D4D4D8;
+
+  --ambient-glow: radial-gradient(
+    1200px circle at 80% -10%,
+    rgba(99, 102, 241, 0.08) 0%,
+    transparent 50%
+  );
+}
+
+/* ── SEPIA / PAPER ──────────────────────────────────────────────────────── */
+
+:root[data-theme="sepia"] {
+  color-scheme: light;
+
+  --bg: #F6F0E6;
+  --bg2: #EFE6D8;
+  --bg3: #E8DCC6;
+  --bg4: #DCCDB1;
+
+  --orange: #8B3E2F;
+  --orange2: #C97B4D;
+
+  --c-hacking: #8B3E2F;
+  --c-normativa: #6B4226;
+  --c-monitoring: #2C7A7B;
+  --c-gobierno: #4D7C0F;
+
+  --text: #2A2418;
+  --muted: #6B5F4D;
+  --muted2: #A99A82;
+  --border: #D9CFBE;
+  --border2: #C5B89E;
+
+  --ambient-glow: radial-gradient(
+    1200px circle at 80% -10%,
+    rgba(139, 62, 47, 0.05) 0%,
+    transparent 50%
+  );
+}
+
+/* ── DARK WARM (amber/níquel) ───────────────────────────────────────────── */
+
+:root[data-theme="dark-warm"] {
+  color-scheme: dark;
+
+  --bg: #0F0D0A;
+  --bg2: #1A1612;
+  --bg3: #221C16;
+  --bg4: #2D241B;
+
+  --orange: #F59E0B;
+  --orange2: #FBBF24;
+
+  --c-hacking: #F59E0B;
+  --c-normativa: #FB923C;
+  --c-monitoring: #FACC15;
+  --c-gobierno: #A3E635;
+
+  --text: #F4EFE5;
+  --muted: #A89B85;
+  --muted2: #6B6155;
+  --border: #2D241B;
+  --border2: #3D3225;
+
+  --ambient-glow: radial-gradient(
+    1200px circle at 80% -10%,
+    rgba(245, 158, 11, 0.08) 0%,
+    transparent 50%
+  );
+}
+
+/* ── Base ───────────────────────────────────────────────────────────────── */
 
 * {
   box-sizing: border-box;
@@ -73,18 +182,15 @@ body {
   -webkit-font-smoothing: antialiased;
   font-feature-settings: 'cv11', 'ss01';
   overflow-x: hidden;
+  transition: background 0.25s ease, color 0.25s ease;
 }
 
-/* Ambient glow indigo MUY sutil — apenas perceptible, sin saturar */
+/* Ambient glow del fondo. Cada tema lo redefine para que el color del acento coincida. */
 body::before {
   content: '';
   position: fixed;
   inset: 0;
-  background: radial-gradient(
-    1200px circle at 80% -10%,
-    rgba(129, 140, 248, 0.06) 0%,
-    transparent 50%
-  );
+  background: var(--ambient-glow);
   pointer-events: none;
   z-index: 0;
 }
@@ -94,23 +200,17 @@ body::before {
   z-index: 1;
 }
 
-/* Scrollbar custom */
 ::-webkit-scrollbar {
   width: 4px;
   height: 4px;
 }
-::-webkit-scrollbar-track {
-  background: transparent;
-}
+::-webkit-scrollbar-track { background: transparent; }
 ::-webkit-scrollbar-thumb {
   background: var(--border2);
   border-radius: var(--radius-full);
 }
-::-webkit-scrollbar-thumb:hover {
-  background: var(--muted);
-}
+::-webkit-scrollbar-thumb:hover { background: var(--muted); }
 
-/* Reset */
 button {
   font-family: inherit;
   border: none;

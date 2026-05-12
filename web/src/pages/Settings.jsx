@@ -2,6 +2,7 @@ import { useEffect, useState } from 'react';
 import Sidebar from '../components/Sidebar';
 import { useAuth } from '../hooks/useAuth';
 import { api } from '../api/client';
+import { THEMES, useTheme } from '../hooks/useTheme';
 
 export default function Settings() {
   const { user, logout, refresh } = useAuth();
@@ -96,7 +97,15 @@ export default function Settings() {
 
           <Section title="Preferencias">
             <Row label="Voz de audio" value="Mateo (eleven_multilingual_v2)" />
-            <Row label="Tema" value="V4 Studious Calm" />
+          </Section>
+
+          <Section title="Tema visual">
+            <p className="text-small" style={{ marginBottom: 16 }}>
+              Elegí la paleta que mejor te acompañe. El cambio se aplica al
+              instante y persiste en este dispositivo. El icono ◐ arriba a la
+              derecha también lo cambia rápido.
+            </p>
+            <ThemePicker />
           </Section>
 
           <Section title="MCP Token">
@@ -124,6 +133,69 @@ function Row({ label, value }) {
     <div className="spread" style={{ padding: '6px 0' }}>
       <span className="text-small">{label}</span>
       <span style={{ fontSize: 13 }}>{value}</span>
+    </div>
+  );
+}
+
+function ThemePicker() {
+  const [theme, setTheme] = useTheme();
+  return (
+    <div
+      style={{
+        display: 'grid',
+        gridTemplateColumns: 'repeat(auto-fit, minmax(220px, 1fr))',
+        gap: 12,
+      }}
+    >
+      {THEMES.map((t) => {
+        const isActive = t.id === theme;
+        return (
+          <button
+            key={t.id}
+            onClick={() => setTheme(t.id)}
+            className="col"
+            style={{
+              alignItems: 'stretch',
+              gap: 10,
+              padding: 12,
+              background: 'var(--bg3)',
+              border: `1px solid ${isActive ? 'var(--orange)' : 'var(--border2)'}`,
+              borderRadius: 'var(--radius-md)',
+              cursor: 'pointer',
+              textAlign: 'left',
+              transition: 'border-color 0.15s, transform 0.1s',
+            }}
+          >
+            <div style={{
+              display: 'grid',
+              gridTemplateColumns: 'repeat(4, 1fr)',
+              gap: 4,
+              height: 32,
+              borderRadius: 6,
+              overflow: 'hidden',
+            }}>
+              {t.swatches.map((s, i) => (
+                <span key={i} style={{ background: s }} />
+              ))}
+            </div>
+            <div>
+              <div style={{
+                fontSize: 14,
+                fontWeight: 500,
+                display: 'flex',
+                alignItems: 'center',
+                gap: 8,
+              }}>
+                {t.label}
+                {isActive && <span className="text-mono-sm" style={{ color: 'var(--orange)', letterSpacing: 1.5 }}>ACTIVO</span>}
+              </div>
+              <div className="text-small muted" style={{ marginTop: 4, lineHeight: 1.4 }}>
+                {t.description}
+              </div>
+            </div>
+          </button>
+        );
+      })}
     </div>
   );
 }
