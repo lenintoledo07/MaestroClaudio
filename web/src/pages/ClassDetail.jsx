@@ -56,7 +56,10 @@ export default function ClassDetail() {
       ]);
       setCourse(c);
       setModule(mods.find((x) => x.id === m.module_id));
-      setSignals(sigs.filter((s) => s.material_id === id));
+      // /modules/{id}/signals devuelve {exam_tip:[...], reference:[...], ...}
+      // agrupado por tipo. Aplanamos a array y filtramos por material_id.
+      const sigsArray = Array.isArray(sigs) ? sigs : Object.values(sigs || {}).flat();
+      setSignals(sigsArray.filter((s) => s.material_id === id));
       setAllCourses(cs.filter((x) => x.status !== 'deleted'));
     })();
   }, [id]);
