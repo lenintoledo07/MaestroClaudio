@@ -11,6 +11,16 @@ import { Markmap } from 'markmap-view';
 
 const transformer = new Transformer();
 
+// Marca nodos a profundidad > maxDepth como "folded" (colapsados). Markmap
+// respeta `payload.fold = 1` y muestra solo los abuelos.
+function foldBelow(node, maxDepth, depth = 0) {
+  if (!node) return;
+  if (depth > maxDepth) {
+    node.payload = { ...(node.payload || {}), fold: 1 };
+  }
+  (node.children || []).forEach((c) => foldBelow(c, maxDepth, depth + 1));
+}
+
 // Paleta más saturada que la default — pensada para fondo oscuro. Cada nivel
 // de profundidad usa un color distinto cycle.
 const PALETTE = [
@@ -72,6 +82,9 @@ export default function MindMap({ markdown, onNodeClick }) {
     if (!markdown || !svgRef.current) return;
     let cancelled = false;
     const { root } = transformer.transform(markdown);
+    // Forzar colapso de cualquier nodo a profundidad >= 2 antes de pasarlo
+    // a markmap. Así inicialmente solo se ve raíz + grandes temas.
+    foldBelow(root, 1);
     if (mmRef.current) {
       try { mmRef.current.setData(root); } catch (e) { console.error('markmap setData', e); }
     } else {
@@ -88,6 +101,9 @@ export default function MindMap({ markdown, onNodeClick }) {
           extraCss: EXTRA_CSS,
           // fitRatio menor = más margen alrededor = nodos más grandes en pantalla.
           fitRatio: 0.85,
+          // Mostrar inicial: raíz (#) + grandes temas (##). El user expande
+          // los sub-temas y hojas haciendo click en la bolita lateral.
+          initialExpandLevel: 1,
         }, root);
       } catch (e) {
         // Fallback: sin opciones custom si algo se rompe.
@@ -110,31 +126,19 @@ export default function MindMap({ markdown, onNodeClick }) {
     }
   }, []);
 
-  // Click sobre el texto del nodo → profundizar (abre chat).
-  // Click sobre el círculo (la bolita de toggle) → markmap colapsa la rama.
-  // El SVG generado tiene estructura:
-  //   <g class="markmap-node">
-  //     <circle/>          ← collapse toggle (lo dejamos pasar al handler de markmap)
-  //     <line/>            ← línea al padre (ignorar)
-  //     <foreignObject>    ← contiene <div><p>texto</p></div> (CLICK aquí = profundizar)
-  //   </g>
-  const handleClick = (e) => {
+  // Click capture: corre ANTES que los listeners de markmap (que están
+  // suscritos en cada <g class="markmap-node">). Si el click fue sobre el
+  // texto del nodo (.markmap-foreign), invocamos onNodeClick y frenamos
+  // el evento para que markmap no colapse la rama también.
+  const handleClickCapture = (e) => {
     if (!onNodeClick) return;
-    const tag = e.target.tagName;
-    // Solo intervenimos si el click fue dentro del foreignObject (texto).
-    // Si fue en circle/line del SVG, lo dejamos para el handler nativo de
-    // markmap (collapse/expand).
-    const inForeign = e.target.closest('foreignObject');
-    if (!inForeign) return;
-    if (tag === 'circle' || tag === 'line') return;
-    const node = e.target.closest('.markmap-node');
-    if (!node) return;
-    const div = node.querySelector('foreignObject div');
-    const text = (div?.textContent || '').trim();
-    if (text) {
-      e.stopPropagation();
-      onNodeClick(text);
-    }
+    const textEl = e.target.closest('.markmap-foreign');
+    if (!textEl) return;  // click en circle/line/etc → dejar a markmap
+    const text = (textEl.textContent || '').trim();
+    if (!text) return;
+    e.stopPropagation();
+    e.preventDefault();
+    onNodeClick(text);
   };
 
   return (
@@ -146,7 +150,7 @@ export default function MindMap({ markdown, onNodeClick }) {
         style={styles.svg}
         width="100%"
         height="100%"
-        onClick={handleClick}
+        onClickCapture={handleClickCapture}
       />
       <div style={styles.hint}>
         🔍 <b>click en un texto</b> = profundizar · click en la bolita = colapsar
