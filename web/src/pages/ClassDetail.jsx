@@ -1,15 +1,20 @@
-import { useEffect, useMemo, useRef, useState } from 'react';
+import { lazy, Suspense, useEffect, useMemo, useRef, useState } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
 import Sidebar from '../components/Sidebar';
 import AbstractArt from '../components/AbstractArt';
 import ChatInterface from '../components/ChatInterface';
 import { api, BASE } from '../api/client';
 
+// markmap-view trae D3 (~600KB). Lazy import para que el bundle inicial
+// del SPA no lo cargue: solo se descarga cuando el user entra a la tab Mapa.
+const MindMap = lazy(() => import('../components/MindMap'));
+
 const TABS = [
-  { key: 'tip',     label: 'Tips',      cls: 'signal-tip' },
-  { key: 'ref',     label: 'Refs',      cls: 'signal-ref' },
-  { key: 'qa',      label: 'Q&A',       cls: 'signal-qa' },
+  { key: 'tip',     label: 'Tips',       cls: 'signal-tip' },
+  { key: 'ref',     label: 'Refs',       cls: 'signal-ref' },
+  { key: 'qa',      label: 'Q&A',        cls: 'signal-qa' },
   { key: 'pending', label: 'Pendientes', cls: 'signal-pending' },
+  { key: 'mindmap', label: 'Mapa',       cls: 'tab-mindmap' },
 ];
 
 const SIGNAL_TYPE_BACKEND = {
@@ -28,6 +33,9 @@ export default function ClassDetail() {
   const [module, setModule] = useState(null);
   const [signals, setSignals] = useState([]);
   const [activeTab, setActiveTab] = useState('tip');
+  const [mindmap, setMindmap] = useState(null);  // { markdown, cached, generated_at }
+  const [mindmapLoading, setMindmapLoading] = useState(false);
+  const [mindmapError, setMindmapError] = useState(null);
 
   const audioRef = useRef(null);
   const [playing, setPlaying] = useState(false);
@@ -50,6 +58,30 @@ export default function ClassDetail() {
       setAllCourses(cs.filter((x) => x.status !== 'deleted'));
     })();
   }, [id]);
+
+  // Lazy-load del mindmap al entrar a la tab (evita gastar Claude si nunca se abre).
+  useEffect(() => {
+    if (activeTab !== 'mindmap' || mindmap || mindmapLoading) return;
+    setMindmapLoading(true);
+    setMindmapError(null);
+    api.get(`/materials/${id}/mindmap`)
+      .then(setMindmap)
+      .catch((e) => setMindmapError(e?.body?.detail || `Error ${e?.status || ''}`))
+      .finally(() => setMindmapLoading(false));
+  }, [activeTab, id, mindmap, mindmapLoading]);
+
+  const regenerateMindmap = async () => {
+    setMindmapLoading(true);
+    setMindmapError(null);
+    try {
+      const r = await api.post(`/materials/${id}/mindmap/regenerate`);
+      setMindmap(r);
+    } catch (e) {
+      setMindmapError(e?.body?.detail || `Error ${e?.status || ''}`);
+    } finally {
+      setMindmapLoading(false);
+    }
+  };
 
   const audioUrl = `${BASE}/materials/${id}/audio`;
   const filtered = signals.filter((s) => s.type === SIGNAL_TYPE_BACKEND[activeTab]);
@@ -147,25 +179,63 @@ export default function ClassDetail() {
         <div className="tabs">
           {TABS.map((t) => (
             <div key={t.key} className={`tab ${activeTab === t.key ? 'active' : ''}`} onClick={() => setActiveTab(t.key)}>
-              {t.label} <span className="text-small">({counts[t.key]})</span>
+              {t.label} {t.key !== 'mindmap' && <span className="text-small">({counts[t.key]})</span>}
             </div>
           ))}
         </div>
 
-        <div className="col" style={{ gap: 4 }}>
-          {filtered.length === 0 && <p className="muted">Sin {TABS.find((t) => t.key === activeTab)?.label.toLowerCase()} en esta clase.</p>}
-          {filtered.map((s) => (
-            <div key={s.id} className={`signal-card ${TABS.find((t) => t.key === activeTab).cls}`}>
-              <div className="signal-meta">
-                {s.timestamp_seconds != null && <span className="font-mono">{fmt(s.timestamp_seconds)}</span>}
-                {s.speaker && <span className="tag">{s.speaker}</span>}
-                {s.importance && <span className={`badge badge-${activeTab}`}>{s.importance}</span>}
+        {activeTab === 'mindmap' ? (
+          <div>
+            {mindmapLoading && !mindmap && (
+              <div className="card" style={{ padding: 32, textAlign: 'center' }}>
+                <p className="muted">Generando mapa con Claude… (~10-20s)</p>
               </div>
-              <div className="signal-content">{s.content}</div>
-              {s.context && <div className="text-small" style={{ marginTop: 6 }}>{s.context}</div>}
-            </div>
-          ))}
-        </div>
+            )}
+            {mindmapError && (
+              <div className="card" style={{ padding: 20, borderColor: 'var(--pending, #EF4444)' }}>
+                <p className="error" style={{ margin: 0 }}>{mindmapError}</p>
+                <button className="btn btn-ghost" style={{ marginTop: 12 }} onClick={() => { setMindmap(null); setMindmapError(null); }}>
+                  Reintentar
+                </button>
+              </div>
+            )}
+            {mindmap && (
+              <>
+                <Suspense fallback={<p className="muted">Cargando renderer…</p>}>
+                  <MindMap markdown={mindmap.markdown} />
+                </Suspense>
+                <div className="row" style={{ marginTop: 12, gap: 12, alignItems: 'center', justifyContent: 'space-between' }}>
+                  <span className="text-small muted">
+                    {mindmap.cached ? '✓ Cacheado' : '✓ Recién generado'}
+                    {mindmap.generated_at && ` · ${new Date(mindmap.generated_at).toLocaleString()}`}
+                  </span>
+                  <button
+                    className="btn btn-ghost"
+                    onClick={regenerateMindmap}
+                    disabled={mindmapLoading}
+                  >
+                    {mindmapLoading ? 'Regenerando…' : '↻ Regenerar'}
+                  </button>
+                </div>
+              </>
+            )}
+          </div>
+        ) : (
+          <div className="col" style={{ gap: 4 }}>
+            {filtered.length === 0 && <p className="muted">Sin {TABS.find((t) => t.key === activeTab)?.label.toLowerCase()} en esta clase.</p>}
+            {filtered.map((s) => (
+              <div key={s.id} className={`signal-card ${TABS.find((t) => t.key === activeTab).cls}`}>
+                <div className="signal-meta">
+                  {s.timestamp_seconds != null && <span className="font-mono">{fmt(s.timestamp_seconds)}</span>}
+                  {s.speaker && <span className="tag">{s.speaker}</span>}
+                  {s.importance && <span className={`badge badge-${activeTab}`}>{s.importance}</span>}
+                </div>
+                <div className="signal-content">{s.content}</div>
+                {s.context && <div className="text-small" style={{ marginTop: 6 }}>{s.context}</div>}
+              </div>
+            ))}
+          </div>
+        )}
 
         <div style={{ marginTop: 28 }}>
           <h3>Preguntá sobre esta clase</h3>

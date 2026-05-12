@@ -15,7 +15,7 @@ from pydantic import BaseModel
 
 from database import get_db, get_pool
 from models.schemas import MaterialResponse
-from services import drive_service
+from services import drive_service, mindmap_service
 from services.auth_service import get_current_user
 
 if TYPE_CHECKING:
@@ -506,3 +506,90 @@ async def delete_material(
             logger.warning("No se pudo borrar audio %s", audio_path)
 
     return {"deleted": True, "material_id": str(material_id)}
+
+
+# ── Mind map ────────────────────────────────────────────────────────────────
+
+
+class MindMapResponse(BaseModel):
+    material_id: UUID
+    markdown: str
+    generated_at: str | None
+    cached: bool
+
+
+@router.get("/materials/{material_id}/mindmap", response_model=MindMapResponse)
+async def get_mindmap(
+    material_id: UUID,
+    user: dict = Depends(get_current_user),
+    db: "asyncpg.Connection" = Depends(get_db),
+):
+    """Devuelve el mapa conceptual cacheado, o lo genera al vuelo si no existe.
+
+    Primera invocación dispara la generación con Claude Haiku (~$0.02). Las
+    siguientes se sirven desde DB. Para forzar regeneración → POST regenerate.
+    """
+    row = await _ensure_material_owned(db, user["id"], material_id)
+
+    if row.get("mind_map_markdown"):
+        return MindMapResponse(
+            material_id=material_id,
+            markdown=row["mind_map_markdown"],
+            generated_at=row["mind_map_generated_at"].isoformat() if row.get("mind_map_generated_at") else None,
+            cached=True,
+        )
+
+    # No hay caché → generar
+    try:
+        markdown = await mindmap_service.generate_mindmap(db, material_id)
+    except ValueError as exc:
+        raise HTTPException(status_code=422, detail=str(exc))
+    except Exception as exc:  # noqa: BLE001
+        logger.exception("mindmap generation failed material=%s", material_id)
+        raise HTTPException(
+            status_code=502,
+            detail=f"No pude generar el mapa: {type(exc).__name__}: {str(exc)[:200]}",
+        )
+
+    # Re-fetch para obtener generated_at coherente
+    fresh = await db.fetchrow(
+        "SELECT mind_map_generated_at FROM materials WHERE id = $1",
+        material_id,
+    )
+    return MindMapResponse(
+        material_id=material_id,
+        markdown=markdown,
+        generated_at=fresh["mind_map_generated_at"].isoformat() if fresh and fresh["mind_map_generated_at"] else None,
+        cached=False,
+    )
+
+
+@router.post("/materials/{material_id}/mindmap/regenerate", response_model=MindMapResponse)
+async def regenerate_mindmap(
+    material_id: UUID,
+    user: dict = Depends(get_current_user),
+    db: "asyncpg.Connection" = Depends(get_db),
+):
+    """Fuerza la regeneración aunque haya caché. Útil si el material cambió o
+    el primer mapa quedó pobre."""
+    await _ensure_material_owned(db, user["id"], material_id)
+    try:
+        markdown = await mindmap_service.generate_mindmap(db, material_id)
+    except ValueError as exc:
+        raise HTTPException(status_code=422, detail=str(exc))
+    except Exception as exc:  # noqa: BLE001
+        logger.exception("mindmap regeneration failed material=%s", material_id)
+        raise HTTPException(
+            status_code=502,
+            detail=f"No pude regenerar el mapa: {type(exc).__name__}: {str(exc)[:200]}",
+        )
+    fresh = await db.fetchrow(
+        "SELECT mind_map_generated_at FROM materials WHERE id = $1",
+        material_id,
+    )
+    return MindMapResponse(
+        material_id=material_id,
+        markdown=markdown,
+        generated_at=fresh["mind_map_generated_at"].isoformat() if fresh and fresh["mind_map_generated_at"] else None,
+        cached=False,
+    )
