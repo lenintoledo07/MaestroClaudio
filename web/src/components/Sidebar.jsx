@@ -1,6 +1,7 @@
 import { NavLink, useNavigate } from 'react-router-dom';
 import AbstractArt from './AbstractArt';
 import CourseMenu from './CourseMenu';
+import MaestroAvatar from './MaestroAvatar';
 import { useAuth } from '../hooks/useAuth';
 
 const NAV_ITEMS = [
@@ -24,8 +25,8 @@ export default function Sidebar({ courses = [], processing = 0, onAddCourse, onC
 
   return (
     <aside className="sidebar">
-      <div className="logo">
-        <div className="logo-square" />
+      <div className="logo" style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
+        <MaestroAvatar size={32} />
         <div className="logo-text">MAESTRO CLAUDIO</div>
       </div>
 
