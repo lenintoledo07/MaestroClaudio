@@ -23,25 +23,44 @@ const PALETTE = [
   '#C4B5FD',  // violet
 ];
 
-// CSS inyectado dentro del SVG de markmap para hacer las letras más grandes
-// y legibles contra el fondo oscuro de la app. markmap acepta `extraCss`.
+// CSS inyectado dentro del SVG de markmap. OJO: el SVG no hereda las CSS
+// vars del documento (var(--text) queda undefined), así que usamos valores
+// hex directos. Sin esto las letras quedan invisibles sobre fondo oscuro.
 const EXTRA_CSS = `
 .markmap-foreign {
-  font-family: 'Newsreader', Georgia, serif !important;
-  font-size: 16px !important;
-  font-weight: 500 !important;
-  color: var(--text, #F4F4F5) !important;
+  font-family: 'Newsreader', Georgia, serif;
+  font-size: 17px;
+  font-weight: 500;
+  color: #F4F4F5;
   cursor: pointer;
 }
+.markmap-foreign p {
+  color: #F4F4F5;
+  margin: 0;
+  white-space: nowrap;
+}
 .markmap-foreign a {
-  color: var(--orange, #818CF8) !important;
+  color: #A5B4FC;
 }
 .markmap-foreign strong {
-  font-weight: 700 !important;
+  font-weight: 700;
+}
+.markmap-foreign code {
+  background: rgba(255,255,255,0.08);
+  padding: 1px 4px;
+  border-radius: 3px;
+  font-size: 14px;
+}
+.markmap-node:hover .markmap-foreign {
+  text-decoration: underline;
+  text-decoration-color: rgba(255,255,255,0.4);
 }
 .markmap-link {
-  stroke-width: 2px !important;
+  stroke-width: 2px;
   opacity: 0.85;
+}
+.markmap-node circle {
+  cursor: pointer;
 }
 `;
 
@@ -67,6 +86,8 @@ export default function MindMap({ markdown, onNodeClick }) {
           },
           duration: 350,
           extraCss: EXTRA_CSS,
+          // fitRatio menor = más margen alrededor = nodos más grandes en pantalla.
+          fitRatio: 0.85,
         }, root);
       } catch (e) {
         // Fallback: sin opciones custom si algo se rompe.
@@ -113,7 +134,7 @@ export default function MindMap({ markdown, onNodeClick }) {
         onDoubleClick={handleDoubleClick}
       />
       <div style={styles.hint}>
-        scroll = zoom · arrastrar = pan · click = colapsa/expande · <b>doble-click = profundizar</b>
+        🔍 <b>doble-click</b> en cualquier nodo para profundizar · scroll = zoom · arrastrar = pan
       </div>
     </div>
   );
@@ -132,12 +153,15 @@ const styles = {
   svg: { width: '100%', height: '100%' },
   hint: {
     position: 'absolute',
-    bottom: 8,
-    left: 0,
-    right: 0,
-    textAlign: 'center',
-    fontSize: 11,
-    color: 'var(--muted)',
+    top: 10,
+    right: 14,
+    fontSize: 12,
+    color: '#F4F4F5',
+    background: 'rgba(14,14,16,0.7)',
+    backdropFilter: 'blur(8px)',
+    border: '1px solid rgba(255,255,255,0.1)',
+    padding: '6px 10px',
+    borderRadius: 8,
     pointerEvents: 'none',
   },
 };
