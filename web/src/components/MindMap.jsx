@@ -51,28 +51,34 @@ export default function MindMap({ markdown, onNodeClick }) {
 
   useEffect(() => {
     if (!markdown || !svgRef.current) return;
+    let cancelled = false;
     const { root } = transformer.transform(markdown);
     if (mmRef.current) {
-      mmRef.current.setData(root);
+      try { mmRef.current.setData(root); } catch (e) { console.error('markmap setData', e); }
     } else {
-      mmRef.current = Markmap.create(svgRef.current, {
-        color: (node) => PALETTE[(node.state?.depth ?? node.depth ?? 0) % PALETTE.length],
-        duration: 350,
-        spacingHorizontal: 90,
-        spacingVertical: 24,
-        paddingX: 14,
-        nodeMinHeight: 28,
-        lineWidth: 2,
-        extraCss: EXTRA_CSS,
-      }, root);
+      // OJO con las options: en markmap-view 0.18 algunos campos cambiaron
+      // y pasar opciones inválidas tira "t is not a function" en runtime.
+      // Mantenemos lo mínimo + extraCss para nuestro look.
+      try {
+        mmRef.current = Markmap.create(svgRef.current, {
+          color: (node) => {
+            const depth = node?.state?.depth ?? node?.depth ?? 0;
+            return PALETTE[depth % PALETTE.length];
+          },
+          duration: 350,
+          extraCss: EXTRA_CSS,
+        }, root);
+      } catch (e) {
+        // Fallback: sin opciones custom si algo se rompe.
+        console.error('markmap create failed, retrying without options', e);
+        mmRef.current = Markmap.create(svgRef.current, undefined, root);
+      }
     }
-    // El SVG puede no tener dimensiones medidas en el primer paint si el
-    // contenedor usa flex/grid. Forzamos fit en el próximo frame, ya con
-    // dimensiones reales.
     const raf = requestAnimationFrame(() => {
+      if (cancelled) return;
       try { mmRef.current?.fit(); } catch { /* ignore */ }
     });
-    return () => cancelAnimationFrame(raf);
+    return () => { cancelled = true; cancelAnimationFrame(raf); };
   }, [markdown]);
 
   // Cleanup cuando el componente se desmonta.
