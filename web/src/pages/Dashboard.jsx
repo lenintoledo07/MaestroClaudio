@@ -20,7 +20,7 @@ export default function Dashboard() {
     try {
       const [cs, ms, evs] = await Promise.all([
         api.get('/courses'),
-        api.get('/materials?limit=20'),
+        api.get('/materials?limit=200'),
         api.get('/evaluations/upcoming').catch(() => []),
       ]);
       const activeCourses = cs.filter((c) => c.status !== 'deleted');
@@ -69,6 +69,13 @@ export default function Dashboard() {
     () => materials.filter((m) => ['pending', 'downloading', 'transcribing', 'extracting'].includes(m.status)).length,
     [materials],
   );
+  // % del trabajo en curso ya terminado. Si no hay nada procesándose y sí hay
+  // procesados → 100%. Si no hay materiales todavía → null (no mostramos %).
+  const loadingPercent = useMemo(() => {
+    const denom = processedCount + processingCount;
+    if (denom === 0) return null;
+    return Math.round((processedCount / denom) * 100);
+  }, [processedCount, processingCount]);
   const nextEval = evals[0];
 
   return (
@@ -96,9 +103,9 @@ export default function Dashboard() {
               {processingCount > 0 ? `${processingCount} procesando` : 'al día'}
             </div>
           </div>
-          <StatMini label="Exam Tips"   value={stats.tips} to="/signals/exam-tips" />
-          <StatMini label="Referencias" value={stats.refs} to="/signals/references" />
-          <StatMini label="Q&A"         value={stats.qa}   to="/signals/qa" />
+          <StatMini label="Exam Tips"   value={stats.tips} to="/signals/exam-tips" loadingPercent={loadingPercent} processing={processingCount} />
+          <StatMini label="Referencias" value={stats.refs} to="/signals/references" loadingPercent={loadingPercent} processing={processingCount} />
+          <StatMini label="Q&A"         value={stats.qa}   to="/signals/qa" loadingPercent={loadingPercent} processing={processingCount} />
         </section>
 
         {statsByCourse.length > 0 && (
@@ -157,9 +164,12 @@ export default function Dashboard() {
   );
 }
 
-function StatMini({ label, value, to }) {
+function StatMini({ label, value, to, loadingPercent, processing }) {
   const navigate = useNavigate();
   const interactive = !!to;
+  // Sólo mostramos el indicador cuando hay material activo procesándose.
+  // Si todo está ready (100%) no aporta información mostrarlo.
+  const showProgress = processing > 0 && loadingPercent != null && loadingPercent < 100;
   return (
     <div
       className="stat-mini"
@@ -172,6 +182,39 @@ function StatMini({ label, value, to }) {
       <div className="label">{label}</div>
       <div className="number">{String(value).padStart(2, '0')}</div>
       <div className="number-deco">{String(value).padStart(2, '0')}</div>
+      {showProgress && <StatMiniProgress percent={loadingPercent} processing={processing} />}
+    </div>
+  );
+}
+
+function StatMiniProgress({ percent, processing }) {
+  return (
+    <div style={{ marginTop: 8, fontSize: 10, color: 'var(--muted)' }}>
+      <div
+        style={{
+          height: 3,
+          borderRadius: 2,
+          background: 'var(--bg3)',
+          overflow: 'hidden',
+          marginBottom: 4,
+        }}
+      >
+        <div
+          style={{
+            height: '100%',
+            width: `${percent}%`,
+            background: 'var(--orange)',
+            transition: 'width 0.4s ease',
+          }}
+        />
+      </div>
+      <div
+        className="text-mono-sm"
+        style={{ display: 'flex', justifyContent: 'space-between', letterSpacing: 1 }}
+      >
+        <span>{percent}% cargado</span>
+        <span>{processing} procesando</span>
+      </div>
     </div>
   );
 }
