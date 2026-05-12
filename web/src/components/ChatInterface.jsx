@@ -1,5 +1,6 @@
 import { useEffect, useRef, useState } from 'react';
 import { api, BASE } from '../api/client';
+import MaestroAvatar from './MaestroAvatar';
 
 const MODES = [
   { key: 'explain',     label: 'Explicar' },
@@ -216,16 +217,26 @@ function ChatMessage({ m }) {
 
   if (isStructured) {
     return (
-      <div style={{ marginBottom: 12 }}>
-        {m.structured.type === 'quiz' && <QuizView questions={m.structured.data} />}
-        {m.structured.type === 'flashcards' && <FlashcardsView cards={m.structured.data} />}
-        {m.sources?.length > 0 && <SourcesList sources={m.sources} />}
+      <div style={{ marginBottom: 12, display: 'flex', alignItems: 'flex-start', gap: 8 }}>
+        <div style={{ flexShrink: 0, marginTop: 4 }}>
+          <MaestroAvatar size={28} />
+        </div>
+        <div style={{ flex: 1, minWidth: 0 }}>
+          {m.structured.type === 'quiz' && <QuizView questions={m.structured.data} />}
+          {m.structured.type === 'flashcards' && <FlashcardsView cards={m.structured.data} />}
+          {m.sources?.length > 0 && <SourcesList sources={m.sources} />}
+        </div>
       </div>
     );
   }
 
   return (
-    <div style={{ display: 'flex', justifyContent: isUser ? 'flex-end' : 'flex-start', marginBottom: 12 }}>
+    <div style={{ display: 'flex', justifyContent: isUser ? 'flex-end' : 'flex-start', alignItems: 'flex-start', gap: 8, marginBottom: 12 }}>
+      {!isUser && (
+        <div style={{ flexShrink: 0, marginTop: 2 }}>
+          <MaestroAvatar size={28} />
+        </div>
+      )}
       <div style={{
         maxWidth: '78%',
         background: isUser ? 'var(--orange)' : 'var(--bg2)',
@@ -233,11 +244,7 @@ function ChatMessage({ m }) {
         color: isUser ? '#0E0E10' : 'var(--text)',
         padding: '12px 16px',
         borderRadius: 14,
-        // Las respuestas del asistente son contenido para LEER → serif.
-        // Los mensajes del user son chrome/UI → sans-serif.
-        fontFamily: isUser
-          ? 'Inter, sans-serif'
-          : 'Newsreader, Georgia, serif',
+        fontFamily: isUser ? 'Inter, sans-serif' : 'Newsreader, Georgia, serif',
         fontSize: isUser ? 13.5 : 15,
         lineHeight: isUser ? 1.5 : 1.6,
         whiteSpace: 'pre-wrap',
