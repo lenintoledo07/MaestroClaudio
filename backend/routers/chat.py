@@ -446,21 +446,27 @@ async def chat_stream(
 
             answer_text = "".join(full)
 
-            # Persistir respuesta + bump conv
-            await db.execute(
-                """
-                INSERT INTO messages (conversation_id, role, content, sources, mode)
-                VALUES ($1, 'assistant', $2, $3::jsonb, $4)
-                """,
-                conversation_id,
-                answer_text,
-                json.dumps(sources_dicts),
-                payload.mode,
-            )
-            await db.execute(
-                "UPDATE conversations SET updated_at = NOW() WHERE id = $1",
-                conversation_id,
-            )
+            # Persistir respuesta + bump conv.
+            # IMPORTANTE: la `db` inyectada por Depends(get_db) ya fue liberada
+            # al pool cuando el handler retornó el StreamingResponse — el
+            # generator sigue corriendo después de ese retorno. Adquirimos una
+            # conexión fresca del pool para estas queries post-stream.
+            pool = get_pool()
+            async with pool.acquire() as conn:
+                await conn.execute(
+                    """
+                    INSERT INTO messages (conversation_id, role, content, sources, mode)
+                    VALUES ($1, 'assistant', $2, $3::jsonb, $4)
+                    """,
+                    conversation_id,
+                    answer_text,
+                    json.dumps(sources_dicts),
+                    payload.mode,
+                )
+                await conn.execute(
+                    "UPDATE conversations SET updated_at = NOW() WHERE id = $1",
+                    conversation_id,
+                )
 
             # Evento final con metadata
             yield (

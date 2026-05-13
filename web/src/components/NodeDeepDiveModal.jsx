@@ -58,7 +58,7 @@ export default function NodeDeepDiveModal({ nodeText, courseId, materialName, on
           <div className="text-mono-sm muted" style={{ marginBottom: 10 }}>
             PROFUNDIZÁ CON MAESTRO CLAUDIO
           </div>
-          <div style={{ flex: 1, minHeight: 0 }}>
+          <div style={{ flex: 1, minHeight: 0, display: 'flex', flexDirection: 'column' }}>
             <ChatInterface
               key={nodeText}
               courseId={courseId}
