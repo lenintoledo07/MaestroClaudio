@@ -55,7 +55,7 @@ export default function NodeDeepDiveModal({ nodeText, courseId, materialName, on
         </div>
 
         <div style={styles.chatSection}>
-          <div className="text-mono-sm muted" style={{ marginBottom: 10 }}>
+          <div className="text-mono-sm muted" style={{ marginBottom: 10, flexShrink: 0 }}>
             PROFUNDIZÁ CON MAESTRO CLAUDIO
           </div>
           <div style={{ flex: 1, minHeight: 0, display: 'flex', flexDirection: 'column' }}>
@@ -82,7 +82,11 @@ const styles = {
     padding: 24,
   },
   modal: {
-    width: '100%', maxWidth: 880, maxHeight: '92vh',
+    // height fijo (no maxHeight): flexbox necesita altura concreta para que
+    // los `flex: 1, minHeight: 0` internos resuelvan. Con maxHeight el modal
+    // crecía con el contenido, el scroller hijo nunca tenía overflow real y
+    // el wheel se filtraba al body.
+    width: '100%', maxWidth: 880, height: '92vh',
     background: 'var(--bg2)', border: '1px solid var(--border)',
     borderRadius: 'var(--radius-lg)',
     display: 'flex', flexDirection: 'column',
