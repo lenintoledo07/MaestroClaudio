@@ -40,3 +40,6 @@ Thumbs.db
 
 # Design exploration mockups (no commitear)
 .design-mockups/
+
+# Workarounds locales de Docker Desktop (Mac-specific, no commitear)
+infrastructure/docker-compose.dev-hostnet.yml

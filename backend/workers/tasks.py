@@ -236,10 +236,38 @@ async def _process_material_async(material_id: UUID) -> dict[str, Any]:
         try:
             from scheduler import notify_user
 
+            notif_data = await conn.fetchrow(
+                """
+                SELECT
+                    c.id   AS course_id,
+                    c.name AS course_name,
+                    mo.name AS module_name,
+                    (SELECT COUNT(*) FROM signals s WHERE s.material_id = $1 AND s.type = 'exam_tip')   AS tips_n,
+                    (SELECT COUNT(*) FROM signals s WHERE s.material_id = $1 AND s.type = 'reference') AS refs_n,
+                    (SELECT COUNT(*) FROM signals s WHERE s.material_id = $1 AND s.type = 'qa')        AS qa_n
+                FROM materials m
+                LEFT JOIN courses c  ON c.id  = m.course_id
+                LEFT JOIN modules mo ON mo.id = m.module_id
+                WHERE m.id = $1
+                """,
+                material_id,
+            )
+
+            module_label = f"· {notif_data['module_name']}" if notif_data and notif_data["module_name"] else ""
+
             await notify_user(
                 material["user_id"],
                 "material_ready",
-                {"material_id": str(material_id), "chunks": chunks_n},
+                {
+                    "material_id": str(material_id),
+                    "course_id": str(notif_data["course_id"]) if notif_data and notif_data["course_id"] else "",
+                    "course_name": (notif_data["course_name"] if notif_data else "") or "Materia",
+                    "module_label": module_label,
+                    "tips_n": notif_data["tips_n"] if notif_data else 0,
+                    "refs_n": notif_data["refs_n"] if notif_data else 0,
+                    "qa_n": notif_data["qa_n"] if notif_data else 0,
+                    "chunks": chunks_n,
+                },
             )
         except Exception as exc:  # noqa: BLE001
             logger.warning("notify_user falló: %s", exc)
