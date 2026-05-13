@@ -165,9 +165,20 @@ export default function ChatInterface({ courseId, moduleId, materialId, initialQ
     }
   };
 
+  // Cuando el chat se embebe dentro de un parent flex (FAB panel, modal del
+  // maptree), el padre nos pasa height="100%". height: 100% no siempre resuelve
+  // bien dentro de un flex container → el scroller interno se queda sin altura
+  // limitada y el wheel se filtra al body. Usar flex: 1 + minHeight: 0 en ese
+  // caso. overflow: hidden crea el contexto de stacking para que el scroller
+  // hijo (flex: 1, overflowY: auto) tenga overflow real.
+  const fillParent = height === '100%';
+  const cardSizing = fillParent
+    ? { flex: 1, minHeight: 0 }
+    : { height };
+
   return (
-    <div className="card" style={{ display: 'flex', flexDirection: 'column', height, padding: 0 }}>
-      <div className="row" style={{ padding: 12, borderBottom: '1px solid var(--border)', gap: 6 }}>
+    <div className="card" style={{ display: 'flex', flexDirection: 'column', ...cardSizing, padding: 0, overflow: 'hidden' }}>
+      <div className="row" style={{ padding: 12, borderBottom: '1px solid var(--border)', gap: 6, flexShrink: 0 }}>
         {MODES.map((m) => (
           <button
             key={m.key}
@@ -191,7 +202,7 @@ export default function ChatInterface({ courseId, moduleId, materialId, initialQ
         ))}
       </div>
 
-      <div className="row" style={{ padding: 12, borderTop: '1px solid var(--border)', gap: 8 }}>
+      <div className="row" style={{ padding: 12, borderTop: '1px solid var(--border)', gap: 8, flexShrink: 0 }}>
         <input
           type="text"
           placeholder="Preguntá lo que quieras..."

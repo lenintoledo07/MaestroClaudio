@@ -35,6 +35,15 @@ export default function ChatLauncher() {
     return () => window.removeEventListener('keydown', onKey);
   }, [state]);
 
+  // Bloquear scroll del body mientras el panel está abierto. Sin esto, el
+  // wheel sobre el chat se propaga a la página de atrás.
+  useEffect(() => {
+    if (state === 'closed') return;
+    const prev = document.body.style.overflow;
+    document.body.style.overflow = 'hidden';
+    return () => { document.body.style.overflow = prev; };
+  }, [state]);
+
   // Ocultar sin sesión, sin onboarding, o en rutas donde no aporta (login,
   // onboarding, /chat que ya es la pantalla dedicada).
   const hiddenRoutes = ['/login', '/onboarding', '/chat'];
